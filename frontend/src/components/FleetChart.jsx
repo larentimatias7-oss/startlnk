@@ -15,26 +15,26 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
     return (
-      <div className="bg-slate-900/95 border border-white/10 rounded-xl p-3 shadow-2xl backdrop-blur-md text-xs">
-        <p className="font-bold text-slate-200 mb-1.5 font-mono">{label}</p>
+      <div className="bg-[#141B22] border border-[#2D3742] rounded-lg p-3 shadow-xl text-xs backdrop-blur-md">
+        <p className="font-bold text-[#F1F5F9] mb-1.5 font-mono">{label}</p>
         <div className="space-y-1">
           {payload.map((entry, index) => (
             <div key={`item-${index}`} className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-1.5">
                 <span
-                  className="w-2.5 h-2.5 rounded-full"
+                  className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-slate-300">{entry.name}:</span>
+                <span className="text-[#CBD5E1]">{entry.name}:</span>
               </div>
-              <span className="font-mono font-bold text-white">
+              <span className="font-mono font-bold text-[#F1F5F9]">
                 {Number(entry.value).toFixed(2)} GB
               </span>
             </div>
           ))}
-          <div className="pt-1.5 mt-1 border-t border-white/10 flex justify-between gap-4 font-bold">
-            <span className="text-slate-200">Total Día:</span>
-            <span className="text-emerald-400 font-mono">{total.toFixed(2)} GB</span>
+          <div className="pt-1.5 mt-1 border-t border-[#242D36] flex justify-between gap-4 font-bold">
+            <span className="text-[#94A3B8]">Total Día:</span>
+            <span className="text-[#F39200] font-mono">{total.toFixed(2)} GB</span>
           </div>
         </div>
       </div>
@@ -46,13 +46,12 @@ const CustomTooltip = ({ active, payload, label }) => {
 export default function FleetChart({ data }) {
   if (!data || data.length === 0) {
     return (
-      <div className="glass-panel rounded-2xl p-6 text-center text-slate-400 text-sm">
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg p-6 text-center text-[#94A3B8] text-sm">
         No hay registros históricos de consumo disponibles.
       </div>
     );
   }
 
-  // Format date labels (e.g. "15 Sep")
   const chartData = data.map(item => {
     const parts = item.date.split('-');
     const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}` : item.date;
@@ -63,52 +62,55 @@ export default function FleetChart({ data }) {
   });
 
   return (
-    <div className="glass-panel rounded-2xl p-5 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+    <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg p-4 sm:p-5 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <TrendingUp className="w-5 h-5" />
+          <div className="p-1.5 rounded-md bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)]">
+            <TrendingUp className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white tracking-tight">
+            <h2 className="text-sm lg:text-base font-bold text-[#F1F5F9] tracking-tight">
               Tendencia de Consumo Global de la Flota (Últimos 30 Días)
             </h2>
-            <p className="text-xs text-slate-400">
-              Desglose acumulado de tráfico Priority, Standard y Opt-In de todos los enlaces
+            <p className="text-xs text-[#94A3B8]">
+              Desglose acumulado de tráfico Priority, Opt-In y Standard de todos los enlaces
             </p>
           </div>
         </div>
       </div>
 
-      <div className="h-72 w-full">
+      <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
+              {/* Priority - Verde corporativo #38A169 */}
               <linearGradient id="priorityGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0.0}/>
+                <stop offset="5%" stopColor="#38A169" stopOpacity={0.35}/>
+                <stop offset="95%" stopColor="#38A169" stopOpacity={0.0}/>
               </linearGradient>
+              {/* Opt-In - Naranja Milicic #F39200 */}
               <linearGradient id="optInGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0}/>
+                <stop offset="5%" stopColor="#F39200" stopOpacity={0.35}/>
+                <stop offset="95%" stopColor="#F39200" stopOpacity={0.0}/>
               </linearGradient>
+              {/* Standard - Azul Informativo #3182CE */}
               <linearGradient id="standardGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0}/>
+                <stop offset="5%" stopColor="#3182CE" stopOpacity={0.35}/>
+                <stop offset="95%" stopColor="#3182CE" stopOpacity={0.0}/>
               </linearGradient>
             </defs>
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#242D36" vertical={false} />
 
             <XAxis
               dataKey="displayDate"
-              stroke="#64748b"
+              stroke="#64748B"
               fontSize={11}
               tickLine={false}
               axisLine={false}
             />
             <YAxis
-              stroke="#64748b"
+              stroke="#64748B"
               fontSize={11}
               tickLine={false}
               axisLine={false}
@@ -121,14 +123,14 @@ export default function FleetChart({ data }) {
               verticalAlign="top"
               align="right"
               iconType="circle"
-              wrapperStyle={{ paddingBottom: '16px', fontSize: '12px' }}
+              wrapperStyle={{ paddingBottom: '12px', fontSize: '11px', color: '#94A3B8' }}
             />
 
             <Area
               type="monotone"
               dataKey="priority_gb"
               name="Priority Data"
-              stroke="#10b981"
+              stroke="#38A169"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#priorityGrad)"
@@ -138,7 +140,7 @@ export default function FleetChart({ data }) {
               type="monotone"
               dataKey="opt_in_priority_gb"
               name="Opt-In Overage"
-              stroke="#f59e0b"
+              stroke="#F39200"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#optInGrad)"
@@ -148,7 +150,7 @@ export default function FleetChart({ data }) {
               type="monotone"
               dataKey="standard_gb"
               name="Standard Data"
-              stroke="#3b82f6"
+              stroke="#3182CE"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#standardGrad)"

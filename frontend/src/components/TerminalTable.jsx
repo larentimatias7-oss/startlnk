@@ -1,20 +1,32 @@
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  Filter,
   Eye,
   RotateCw,
   Sliders,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
   Globe,
-  ArrowUpDown
+  Copy,
+  Check
 } from 'lucide-react';
 
-export default function TerminalTable({ terminals, onSelectTerminal, onRequestReboot, onRequestOptIn }) {
+export default function TerminalTable({
+  terminals,
+  onSelectTerminal,
+  onRequestReboot,
+  onRequestOptIn,
+  onCopyNotice
+}) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  const handleCopy = (text, key, e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    if (onCopyNotice) onCopyNotice(`Copiado al portapapeles: ${text}`);
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   const filteredTerminals = useMemo(() => {
     return (terminals || []).filter(t => {
@@ -38,61 +50,64 @@ export default function TerminalTable({ terminals, onSelectTerminal, onRequestRe
   }, [terminals, search, statusFilter]);
 
   return (
-    <div className="glass-panel rounded-2xl overflow-hidden">
+    <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg overflow-hidden shadow-sm">
       {/* Header controls: Search & Filters */}
-      <div className="p-4 sm:p-5 border-b border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="p-3.5 sm:p-4 border-b border-[#2D3742] flex flex-col sm:flex-row items-center justify-between gap-3">
         {/* Search bar */}
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por nombre, serial, SL o cuenta..."
+            placeholder="Buscar por nickname, serial, SL o cuenta..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-all"
+            className="w-full pl-8 pr-3 py-1.5 bg-[#141B22] border border-[#2D3742] rounded-md text-xs text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:border-[#F39200] transition-colors"
           />
         </div>
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
           {[
             { id: 'all', label: 'Todos' },
             { id: 'online', label: 'Online' },
             { id: 'offline', label: 'Offline' },
             { id: 'alerts', label: 'En Alarma' },
-          ].map(filter => (
-            <button
-              key={filter.id}
-              onClick={() => setStatusFilter(filter.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                statusFilter === filter.id
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                  : 'bg-slate-900/60 text-slate-400 hover:text-white border border-white/5'
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+          ].map(filter => {
+            const isActive = statusFilter === filter.id;
+            return (
+              <button
+                key={filter.id}
+                onClick={() => setStatusFilter(filter.id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                  isActive
+                    ? 'bg-[#F39200] text-slate-950 font-bold shadow-sm'
+                    : 'bg-[#141B22] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] border border-[#2D3742]'
+                }`}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-950/60 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/5">
-            <tr>
-              <th className="py-3.5 px-4 lg:px-6">Enlace / Dispositivo</th>
-              <th className="py-3.5 px-4">Estado</th>
-              <th className="py-3.5 px-4">Rendimiento</th>
-              <th className="py-3.5 px-4 min-w-[200px]">Consumo Cuota (Ciclo)</th>
-              <th className="py-3.5 px-4 text-center">IP Pública</th>
-              <th className="py-3.5 px-4 text-right">Acciones</th>
+          <thead className="bg-[#141A20] text-[#94A3B8] uppercase tracking-wider font-semibold border-b border-[#2D3742]">
+            <tr className="h-10">
+              <th className="py-2.5 px-4 lg:px-6">Enlace / Dispositivo</th>
+              <th className="py-2.5 px-4">Estado</th>
+              <th className="py-2.5 px-4">Throughput / Latencia</th>
+              <th className="py-2.5 px-4 min-w-[190px]">Consumo Cuota (Mes)</th>
+              <th className="py-2.5 px-4 text-center">IP Pública</th>
+              <th className="py-2.5 px-4 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-[#1E262F]">
             {filteredTerminals.length === 0 ? (
               <tr>
-                <td colSpan="6" className="py-12 text-center text-slate-400">
+                <td colSpan="6" className="py-10 text-center text-[#94A3B8]">
                   No se encontraron terminales con los filtros seleccionados.
                 </td>
               </tr>
@@ -101,73 +116,83 @@ export default function TerminalTable({ terminals, onSelectTerminal, onRequestRe
                 const pct = t.quota_consumed_percent || 0;
                 const isWarn = pct >= 80 && pct < 100;
                 const isCrit = pct >= 100;
+                const copyId = `sl-${t.id}`;
 
                 return (
                   <tr
                     key={t.id}
-                    className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                    className="h-12 hover:bg-[#222C38] transition-colors group cursor-pointer"
                     onClick={() => onSelectTerminal(t.device_id)}
                   >
                     {/* 1. Terminal / Account info */}
-                    <td className="py-3.5 px-4 lg:px-6">
-                      <div className="font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    <td className="py-2 px-4 lg:px-6">
+                      <div className="font-bold text-[#F1F5F9] group-hover:text-[#F39200] transition-colors max-w-[220px] truncate">
                         {t.nickname || t.device_id}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                        <span className="font-mono">{t.service_line_number || 'Sin SL'}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#94A3B8]">
+                        <span className="font-mono text-[#CBD5E1]">{t.service_line_number || 'Sin SL'}</span>
+                        {t.service_line_number && (
+                          <button
+                            onClick={(e) => handleCopy(t.service_line_number, copyId, e)}
+                            className="p-0.5 hover:text-[#F39200] text-[#64748B] transition-colors"
+                            title="Copiar número de línea"
+                          >
+                            {copiedKey === copyId ? (
+                              <Check className="w-3 h-3 text-[#38A169]" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
                         <span>•</span>
-                        <span>{t.account_name || 'TSM Patagonia'}</span>
+                        <span className="truncate max-w-[140px]">{t.account_name || 'Milicic S.A.'}</span>
                       </div>
                     </td>
 
-                    {/* 2. Status & Ping */}
-                    <td className="py-3.5 px-4">
+                    {/* 2. Status Badge */}
+                    <td className="py-2 px-4">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold ${
                           t.is_online
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            ? 'bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[#38A169]/30'
+                            : 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border border-[#E53E3E]/30'
                         }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${t.is_online ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                          <span className={`w-1.5 h-1.5 rounded-full ${t.is_online ? 'bg-[#38A169]' : 'bg-[#E53E3E]'}`} />
                           {t.is_online ? 'Online' : 'Offline'}
                         </span>
-                        {t.is_online && (
-                          <span className="font-mono text-slate-400 text-[11px]">
-                            {t.ping_ms} ms
-                          </span>
-                        )}
                       </div>
                     </td>
 
-                    {/* 3. Throughput */}
-                    <td className="py-3.5 px-4">
+                    {/* 3. Throughput & Ping */}
+                    <td className="py-2 px-4">
                       {t.is_online ? (
                         <div className="font-mono text-[11px]">
-                          <span className="text-blue-400 font-bold">↓ {t.downlink_mbps}</span>
-                          <span className="text-slate-500 mx-1">/</span>
-                          <span className="text-slate-300 font-medium">↑ {t.uplink_mbps} Mbps</span>
+                          <span className="text-[#3182CE] font-bold">↓ {t.downlink_mbps}</span>
+                          <span className="text-[#64748B] mx-1">/</span>
+                          <span className="text-[#CBD5E1]">↑ {t.uplink_mbps} Mbps</span>
+                          <span className="block text-[10px] text-[#94A3B8]">Ping: {t.ping_ms} ms</span>
                         </div>
                       ) : (
-                        <span className="text-slate-600 font-mono">-</span>
+                        <span className="text-[#64748B] font-mono">-</span>
                       )}
                     </td>
 
-                    {/* 4. Quota Bar */}
-                    <td className="py-3.5 px-4">
+                    {/* 4. Quota Progress */}
+                    <td className="py-2 px-4">
                       <div className="flex justify-between text-[11px] mb-1">
-                        <span className="font-mono text-slate-300">
+                        <span className="font-mono text-[#CBD5E1]">
                           {t.quota_consumed_gb.toFixed(1)} / {t.quota_total_gb.toFixed(0)} GB
                         </span>
                         <span className={`font-bold font-mono ${
-                          isCrit ? 'text-rose-400' : isWarn ? 'text-amber-400' : 'text-emerald-400'
+                          isCrit ? 'text-[#E53E3E]' : isWarn ? 'text-[#DD6B20]' : 'text-[#38A169]'
                         }`}>
                           {pct}%
                         </span>
                       </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-[#141B22] rounded-full overflow-hidden border border-[#242D36]">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            isCrit ? 'bg-rose-500' : isWarn ? 'bg-amber-400' : 'bg-emerald-500'
+                            isCrit ? 'bg-[#E53E3E]' : isWarn ? 'bg-[#DD6B20]' : 'bg-[#F39200]'
                           }`}
                           style={{ width: `${Math.min(pct, 100)}%` }}
                         />
@@ -175,40 +200,40 @@ export default function TerminalTable({ terminals, onSelectTerminal, onRequestRe
                     </td>
 
                     {/* 5. Public IP */}
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-2 px-4 text-center">
                       {t.has_public_ip ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[rgba(49,130,206,0.16)] text-[#3182CE] border border-[#3182CE]/30 text-[10px] font-bold">
                           <Globe className="w-3 h-3" />
                           Sí
                         </span>
                       ) : (
-                        <span className="text-slate-500 text-[11px]">-</span>
+                        <span className="text-[#64748B] text-[11px] font-mono">No</span>
                       )}
                     </td>
 
                     {/* 6. Quick Actions */}
-                    <td className="py-3.5 px-4 text-right" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
+                    <td className="py-2 px-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onSelectTerminal(t.device_id)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-all"
+                          className="p-1.5 rounded-md bg-[#141B22] hover:bg-[#2D3742] text-[#CBD5E1] hover:text-[#F1F5F9] border border-[#2D3742] transition-colors"
                           title="Ver telemetría y gráficos"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => onRequestReboot(t)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 transition-all"
+                          className="p-1.5 rounded-md bg-[#141B22] hover:bg-[rgba(229,62,62,0.16)] text-[#CBD5E1] hover:text-[#E53E3E] border border-[#2D3742] hover:border-[#E53E3E]/40 transition-colors"
                           title="Reiniciar antena de forma remota"
                         >
-                          <RotateCw className="w-4 h-4" />
+                          <RotateCw className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => onRequestOptIn(t)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-400 transition-all"
+                          className="p-1.5 rounded-md bg-[#141B22] hover:bg-[rgba(243,146,0,0.16)] text-[#CBD5E1] hover:text-[#F39200] border border-[#2D3742] hover:border-[#F39200]/40 transition-colors"
                           title="Gestionar Data Opt-In (Overage)"
                         >
-                          <Sliders className="w-4 h-4" />
+                          <Sliders className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

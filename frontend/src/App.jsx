@@ -5,6 +5,8 @@ import FleetChart from './components/FleetChart.jsx';
 import TerminalTable from './components/TerminalTable.jsx';
 import TerminalDetailModal from './components/TerminalDetailModal.jsx';
 import ActionConfirmModal from './components/ActionConfirmModal.jsx';
+import Toast from './components/Toast.jsx';
+import MilicicLogo from './components/MilicicLogo.jsx';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function App() {
@@ -12,6 +14,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState(null);
+
+  // Toast state
+  const [toast, setToast] = useState({ message: null, type: 'info' });
 
   // Modals state
   const [selectedTerminalId, setSelectedTerminalId] = useState(null);
@@ -21,11 +26,15 @@ export default function App() {
     target: null,
   });
 
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
+
   const fetchOverview = useCallback(async () => {
     try {
       setError(null);
       const res = await fetch('/api/terminals/overview');
-      if (!res.ok) throw new Error('Error al conectar con la API local');
+      if (!res.ok) throw new Error('Error de conexión con la API local de Starlink');
       const json = await res.json();
       setData(json);
     } catch (err) {
@@ -49,8 +58,10 @@ export default function App() {
       const res = await fetch('/api/terminals/sync', { method: 'POST' });
       const result = await res.json();
       await fetchOverview();
+      showToast(result.message || 'Sincronización con TSM ECHO completada', 'success');
     } catch (err) {
       console.error('Manual sync failed:', err);
+      showToast('Fallo al sincronizar con TSM ECHO', 'danger');
     } finally {
       setIsSyncing(false);
     }
@@ -73,7 +84,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#0F141A] text-[#F1F5F9] flex flex-col font-sans selection:bg-[#F39200]/30 selection:text-[#F1F5F9]">
+      {/* Toast Notification Container */}
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ message: null, type: 'info' })}
+      />
+
       {/* App Header */}
       <Header
         kpis={data?.kpis}
@@ -82,34 +100,34 @@ export default function App() {
         onRefresh={fetchOverview}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">
-        {/* Connection Notice / Warning */}
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-5 space-y-5">
+        {/* Demo Mode / Warning Banner */}
         {data?.kpis?.sync_status === 'WARNING' && (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center justify-between gap-3">
+          <div className="p-3.5 rounded-lg bg-[#1A222B] border border-[#DD6B20]/40 text-[#CBD5E1] text-xs flex items-center justify-between gap-3 shadow-sm">
             <div className="flex items-center gap-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-[#DD6B20] shrink-0" />
               <span>
-                <strong>Modo Demostración / Caché Activo:</strong> Se están visualizando telemetría y consumos simulados o en caché. Para habilitar sincronización en vivo con la plataforma TSM ECHO, configura <code className="px-1.5 py-0.5 rounded bg-amber-500/20 font-mono text-[11px]">ECHO_EMAIL</code> y <code className="px-1.5 py-0.5 rounded bg-amber-500/20 font-mono text-[11px]">ECHO_PASSWORD</code> en el archivo <code className="px-1.5 py-0.5 rounded bg-amber-500/20 font-mono text-[11px]">backend/.env</code>.
+                <strong className="text-[#F1F5F9]">Modo Demostración / Caché Activo:</strong> Se están visualizando consumos en caché. Para sincronización en vivo con TSM ECHO, configura las credenciales en <code className="px-1.5 py-0.5 rounded bg-[#141B22] border border-[#2D3742] font-mono text-[11px] text-[#F39200]">.env</code>.
               </span>
             </div>
             <button
               onClick={handleManualSync}
               disabled={isSyncing}
-              className="shrink-0 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-semibold"
+              className="shrink-0 px-3 py-1 rounded-md bg-[rgba(243,146,0,0.16)] hover:bg-[#F39200] text-[#F39200] hover:text-slate-950 text-xs font-bold transition-colors border border-[rgba(243,146,0,0.3)]"
             >
               Reintentar
             </button>
           </div>
         )}
 
-        {/* Global Error Banner */}
+        {/* Global Error Notice */}
         {error && (
-          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center justify-between">
+          <div className="p-3.5 rounded-lg bg-[rgba(229,62,62,0.12)] border border-[#E53E3E]/40 text-[#F1F5F9] text-xs flex items-center justify-between">
             <span>{error}</span>
             <button
               onClick={fetchOverview}
-              className="px-3 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 font-semibold"
+              className="px-3 py-1 rounded-md bg-[#E53E3E] text-white font-bold text-xs hover:bg-[#C53030] transition-colors"
             >
               Reintentar
             </button>
@@ -117,25 +135,25 @@ export default function App() {
         )}
 
         {loading ? (
-          <div className="py-24 text-center text-slate-400 text-sm flex flex-col items-center gap-3">
-            <RefreshCw className="w-8 h-8 animate-spin text-emerald-400" />
-            <span className="font-medium">Iniciando Dashboard de Enlaces Starlink...</span>
+          <div className="py-24 text-center text-[#94A3B8] text-xs flex flex-col items-center gap-2.5">
+            <RefreshCw className="w-7 h-7 animate-spin text-[#F39200]" />
+            <span className="font-semibold text-[#F1F5F9]">Cargando flota de terminales Starlink...</span>
           </div>
         ) : (
           <>
-            {/* 1. KPI Cards */}
+            {/* 1. Tarjetas KPI */}
             <KpiCards kpis={data?.kpis} terminals={data?.terminals} />
 
-            {/* 2. Fleet 30D Consumption Chart */}
+            {/* 2. Gráfico de Tendencia 30 Días */}
             <FleetChart data={data?.fleet_daily_trend} />
 
-            {/* 3. Filterable Fleet Table */}
+            {/* 3. Grilla de Inventario */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Inventario de Enlaces y Monitoreo de Cuotas
+              <div className="flex items-center justify-between mb-2.5">
+                <h2 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
+                  Inventario de Enlaces Satelitales y Cuotas
                 </h2>
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-[#94A3B8] font-mono">
                   {data?.terminals?.length || 0} terminales registradas
                 </span>
               </div>
@@ -144,11 +162,28 @@ export default function App() {
                 onSelectTerminal={id => setSelectedTerminalId(id)}
                 onRequestReboot={handleOpenReboot}
                 onRequestOptIn={handleOpenOptIn}
+                onCopyNotice={(msg) => showToast(msg, 'info')}
               />
             </div>
           </>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-[#2D3742] bg-[#141A20] px-4 lg:px-8 py-3 text-xs text-[#94A3B8] mt-8">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <MilicicLogo height={20} white={true} />
+            <span className="text-[#64748B]">|</span>
+            <span>Sistema Corporativo de Telemetría Starlink • Milicic S.A.</span>
+          </div>
+          <div className="flex items-center gap-3 font-mono text-[11px]">
+            <span>TSM Patagonia Engine</span>
+            <span className="text-[#64748B]">•</span>
+            <span className="text-[#38A169]">ECHO Connected</span>
+          </div>
+        </div>
+      </footer>
 
       {/* Terminal Detail Modal */}
       {selectedTerminalId && (
@@ -166,7 +201,10 @@ export default function App() {
         actionType={actionModal.type}
         target={actionModal.target}
         onClose={() => setActionModal(prev => ({ ...prev, isOpen: false }))}
-        onSuccess={fetchOverview}
+        onSuccess={() => {
+          fetchOverview();
+          showToast('Instrucción enviada exitosamente al Backoffice', 'success');
+        }}
       />
     </div>
   );

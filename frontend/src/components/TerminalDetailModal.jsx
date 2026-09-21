@@ -2,17 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   Radio,
-  Gauge,
   HardDrive,
   RotateCw,
   Sliders,
-  Calendar,
-  AlertTriangle,
-  CheckCircle,
+  Activity,
+  BarChart3,
+  Shield,
+  Clock,
   MapPin,
-  Cpu,
-  Wifi,
-  Globe
+  Globe,
+  CheckCircle2
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -31,6 +30,7 @@ export default function TerminalDetailModal({
   onRequestReboot,
   onRequestOptIn
 }) {
+  const [activeTab, setActiveTab] = useState('telemetry'); // telemetry, billing, actions
   const [detail, setDetail] = useState(null);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -64,215 +64,332 @@ export default function TerminalDetailModal({
 
   if (!deviceId) return null;
 
+  const formatUptime = (seconds) => {
+    if (!seconds) return '0h';
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    return `${days}d ${hours}h`;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-slate-950 border border-white/10 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Modal Header */}
-        <div className="p-5 border-b border-white/10 flex items-center justify-between bg-slate-900/60">
+        <div className="px-5 py-3.5 border-b border-[#2D3742] flex items-center justify-between bg-[#141A20]">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <Radio className="w-5 h-5" />
+            <div className="p-2 rounded-md bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)]">
+              <Radio className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-black text-white">
+                <h2 className="text-base font-bold text-[#F1F5F9]">
                   {detail?.nickname || deviceId}
                 </h2>
                 {detail && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                     detail.is_online
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      ? 'bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[#38A169]/30'
+                      : 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border border-[#E53E3E]/30'
                   }`}>
                     {detail.is_online ? 'ONLINE' : 'OFFLINE'}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 font-mono">
-                Device: {deviceId} {detail?.service_line_number && `| Línea: ${detail.service_line_number}`}
+              <p className="text-[11px] text-[#94A3B8] font-mono">
+                {deviceId} {detail?.service_line_number && `• Línea: ${detail.service_line_number}`}
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6">
+        {/* Tab Navigation */}
+        <div className="px-5 bg-[#141B22] border-b border-[#2D3742] flex gap-6 text-xs font-semibold">
+          <button
+            onClick={() => setActiveTab('telemetry')}
+            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
+              activeTab === 'telemetry'
+                ? 'border-[#F39200] text-[#F39200] font-bold'
+                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span>Telemetría RF & Hardware</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
+              activeTab === 'billing'
+                ? 'border-[#F39200] text-[#F39200] font-bold'
+                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Consumo & Ciclo Activo</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('actions')}
+            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
+              activeTab === 'actions'
+                ? 'border-[#F39200] text-[#F39200] font-bold'
+                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Control Remoto</span>
+          </button>
+        </div>
+
+        {/* Modal Body with Divulgación Progresiva */}
+        <div className="p-5 overflow-y-auto space-y-4 max-h-[calc(85vh-115px)] scrollbar-thin scrollbar-thumb-[#2D3742]">
           {loading ? (
-            <div className="py-16 text-center text-slate-400 text-sm flex flex-col items-center gap-3">
-              <RotateCw className="w-6 h-6 animate-spin text-emerald-400" />
+            <div className="py-16 text-center text-[#94A3B8] text-xs flex flex-col items-center gap-2">
+              <RotateCw className="w-6 h-6 animate-spin text-[#F39200]" />
               <span>Cargando telemetría e histórico de Starlink...</span>
             </div>
           ) : error ? (
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
+            <div className="p-3.5 rounded-md bg-[rgba(229,62,62,0.16)] border border-[#E53E3E]/40 text-[#F1F5F9] text-xs">
               {error}
             </div>
           ) : detail ? (
             <>
-              {/* Telemetry Metrics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
-                  <span className="text-[11px] font-semibold text-slate-400 block mb-1">Latencia Ping</span>
-                  <span className="text-xl font-mono font-black text-white">
-                    {detail.ping_ms} <span className="text-xs text-slate-400 font-sans">ms</span>
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
-                  <span className="text-[11px] font-semibold text-slate-400 block mb-1">Downlink / Uplink</span>
-                  <span className="text-lg font-mono font-bold text-blue-400">
-                    {detail.downlink_mbps} <span className="text-xs text-slate-400 font-sans">/</span> {detail.uplink_mbps} <span className="text-xs text-slate-400 font-sans">Mbps</span>
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
-                  <span className="text-[11px] font-semibold text-slate-400 block mb-1">Calidad de Señal</span>
-                  <span className="text-xl font-mono font-black text-emerald-400">
-                    {detail.signal_quality}%
-                  </span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/5">
-                  <span className="text-[11px] font-semibold text-slate-400 block mb-1">Obstrucción</span>
-                  <span className="text-xl font-mono font-black text-slate-200">
-                    {detail.obstruction_percent}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Hardware & Plan Details */}
-              <div className="p-4 rounded-xl bg-slate-900/40 border border-white/5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                <div>
-                  <span className="text-slate-400 block mb-0.5 font-semibold">Modelo de Antena</span>
-                  <span className="text-white font-medium">{detail.dish_model || 'Standard'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-0.5 font-semibold">Serial del Kit / Dish</span>
-                  <span className="text-white font-mono">{detail.kit_serial || detail.dish_serial || 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block mb-0.5 font-semibold">Cuenta / Cliente</span>
-                  <span className="text-white font-medium">{detail.account_name || 'TSM Patagonia'}</span>
-                </div>
-              </div>
-
-              {/* Billing Cycle Status */}
-              {detail.billing_cycle && (
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-white/10 space-y-3">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-cyan-400" />
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">
-                        Ciclo de Facturación Activo #{detail.billing_cycle.id}
+              {/* TAB 1: TELEMETRÍA RF Y HARDWARE */}
+              {activeTab === 'telemetry' && (
+                <div className="space-y-4">
+                  {/* RF Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Latencia Ping</span>
+                      <span className="text-xl font-mono font-black text-[#F1F5F9]">
+                        {detail.ping_ms} <span className="text-xs text-[#94A3B8] font-sans">ms</span>
                       </span>
                     </div>
-                    {detail.billing_cycle.start_date && (
-                      <span className="text-xs text-slate-400 font-mono">
-                        {detail.billing_cycle.start_date.split('T')[0]} al {detail.billing_cycle.end_date?.split('T')[0]}
+
+                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Downlink / Uplink</span>
+                      <span className="text-lg font-mono font-bold text-[#3182CE]">
+                        {detail.downlink_mbps} <span className="text-xs text-[#94A3B8] font-sans">/</span> {detail.uplink_mbps} <span className="text-xs text-[#94A3B8] font-sans">Mbps</span>
                       </span>
-                    )}
+                    </div>
+
+                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Calidad de Señal</span>
+                      <span className="text-xl font-mono font-black text-[#38A169]">
+                        {detail.signal_quality}%
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Obstrucción RF</span>
+                      <span className="text-xl font-mono font-black text-[#CBD5E1]">
+                        {detail.obstruction_percent}%
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between items-baseline text-xs">
-                    <span className="text-slate-300">
-                      Consumo acumulado: <strong className="text-white font-mono">{detail.billing_cycle.consumed_amount_gb} GB</strong> de <strong className="text-white font-mono">{detail.billing_cycle.total_amount_gb} GB</strong>
-                    </span>
-                    <span className={`font-bold font-mono text-sm ${
-                      detail.billing_cycle.consumed_percent >= 100
-                        ? 'text-rose-400'
-                        : detail.billing_cycle.consumed_percent >= 80
-                        ? 'text-amber-400'
-                        : 'text-emerald-400'
-                    }`}>
-                      {detail.billing_cycle.consumed_percent}%
-                    </span>
-                  </div>
-
-                  <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        detail.billing_cycle.consumed_percent >= 100
-                          ? 'bg-rose-500'
-                          : detail.billing_cycle.consumed_percent >= 80
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${Math.min(detail.billing_cycle.consumed_percent, 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Stacked Bar Chart of Daily Consumption */}
-              {history && history.daily_usages && history.daily_usages.length > 0 && (
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                      Desglose Diario de Consumo (Priority vs Opt-In vs Standard)
+                  {/* Hardware and Network Inventory */}
+                  <div className="bg-[#141B22] border border-[#2D3742] rounded-md p-4">
+                    <h3 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider mb-3">
+                      Especificaciones de Hardware y Red
                     </h3>
-                    <span className="text-xs font-mono text-slate-400">
-                      Total Ciclo: <strong className="text-emerald-400">{history.total_consumed_gb} GB</strong>
-                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">Modelo de Antena:</span>
+                        <span className="text-[#F1F5F9] font-medium">{detail.dish_model || 'Flat High Performance'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">Serial Antena / Dish:</span>
+                        <span className="text-[#F1F5F9] font-mono">{detail.dish_serial || detail.kit_serial || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">Serial del Kit:</span>
+                        <span className="text-[#F1F5F9] font-mono">{detail.kit_serial || 'N/A'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">Router ID:</span>
+                        <span className="text-[#F1F5F9] font-mono">{detail.router_id || 'Integrado'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">IP Pública Enrutable:</span>
+                        <span className={`font-semibold ${detail.has_public_ip ? 'text-[#3182CE]' : 'text-[#94A3B8]'}`}>
+                          {detail.has_public_ip ? 'Habilitada' : 'CGNAT Privada'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[#94A3B8] block text-[11px]">Tiempo Operativo (Uptime):</span>
+                        <span className="text-[#F1F5F9] font-mono">{formatUptime(detail.uptime_seconds)}</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="h-64 w-full bg-slate-900/40 border border-white/5 rounded-xl p-3">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={history.daily_usages.map(u => ({
-                          ...u,
-                          displayDate: u.date.split('-').slice(1).join('/')
-                        }))}
-                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        <XAxis dataKey="displayDate" stroke="#64748b" fontSize={10} tickLine={false} />
-                        <YAxis stroke="#64748b" fontSize={10} tickLine={false} unit="GB" />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: '11px' }} />
-                        <Bar dataKey="priority_gb" name="Prioridad" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
-                        <Bar dataKey="opt_in_priority_gb" name="Opt-In Excedente" stackId="a" fill="#f59e0b" />
-                        <Bar dataKey="standard_gb" name="Estándar" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {/* Geolocation info if available */}
+                  {(detail.latitude || detail.h3_cell_id) && (
+                    <div className="bg-[#141B22] border border-[#2D3742] rounded-md p-3.5 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-[#F39200]" />
+                        <span className="text-[#CBD5E1]">
+                          Coordenadas: <span className="font-mono text-[#F1F5F9]">{detail.latitude?.toFixed(4)}, {detail.longitude?.toFixed(4)}</span>
+                        </span>
+                      </div>
+                      {detail.h3_cell_id && (
+                        <span className="text-[#94A3B8] font-mono text-[11px]">
+                          Celda H3: {detail.h3_cell_id}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Action Controls Bar */}
-              <div className="p-4 rounded-xl bg-slate-900/60 border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-xs font-bold text-white">Acciones Operativas Remotas</h4>
-                  <p className="text-[11px] text-slate-400">
-                    Instrucciones seguras con confirmación hacia el Backoffice de Starlink
-                  </p>
-                </div>
+              {/* TAB 2: CICLO DE FACTURACIÓN Y CONSUMO DIARIO */}
+              {activeTab === 'billing' && (
+                <div className="space-y-4">
+                  {detail.billing_cycle && (
+                    <div className="p-4 rounded-md bg-[#141B22] border border-[#2D3742] space-y-2.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-2">
+                          <HardDrive className="w-4 h-4 text-[#F39200]" />
+                          <span className="font-bold text-[#F1F5F9] uppercase tracking-wider">
+                            Ciclo Activo #{detail.billing_cycle.id}
+                          </span>
+                        </div>
+                        {detail.billing_cycle.start_date && (
+                          <span className="text-[#94A3B8] font-mono text-[11px]">
+                            {detail.billing_cycle.start_date.split('T')[0]} al {detail.billing_cycle.end_date?.split('T')[0]}
+                          </span>
+                        )}
+                      </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={() => onRequestOptIn(detail)}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition-all border border-white/5"
-                  >
-                    <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Configurar Opt-In</span>
-                  </button>
+                      <div className="flex justify-between items-baseline text-xs">
+                        <span className="text-[#CBD5E1]">
+                          Consumo acumulado: <strong className="text-[#F1F5F9] font-mono">{detail.billing_cycle.consumed_amount_gb} GB</strong> de <strong className="text-[#F1F5F9] font-mono">{detail.billing_cycle.total_amount_gb} GB</strong>
+                        </span>
+                        <span className={`font-mono font-bold text-sm ${
+                          detail.billing_cycle.consumed_percent >= 100
+                            ? 'text-[#E53E3E]'
+                            : detail.billing_cycle.consumed_percent >= 80
+                            ? 'text-[#DD6B20]'
+                            : 'text-[#38A169]'
+                        }`}>
+                          {detail.billing_cycle.consumed_percent}%
+                        </span>
+                      </div>
 
-                  <button
-                    onClick={() => onRequestReboot(detail)}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white text-xs font-semibold transition-all border border-rose-500/20 hover:border-rose-500"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                    <span>Reiniciar Antena</span>
-                  </button>
+                      <div className="w-full h-2 bg-[#0F141A] rounded-full overflow-hidden border border-[#242D36]">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            detail.billing_cycle.consumed_percent >= 100
+                              ? 'bg-[#E53E3E]'
+                              : detail.billing_cycle.consumed_percent >= 80
+                              ? 'bg-[#DD6B20]'
+                              : 'bg-[#F39200]'
+                          }`}
+                          style={{ width: `${Math.min(detail.billing_cycle.consumed_percent, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recharts Daily Bar Chart */}
+                  {history && history.daily_usages && history.daily_usages.length > 0 && (
+                    <div className="bg-[#141B22] border border-[#2D3742] rounded-md p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
+                          Consumo Diario Desglosado por Tipo de Tráfico
+                        </h4>
+                        <span className="text-xs font-mono text-[#94A3B8]">
+                          Total Ciclo: <strong className="text-[#F39200]">{history.total_consumed_gb} GB</strong>
+                        </span>
+                      </div>
+
+                      <div className="h-60 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={history.daily_usages.map(u => ({
+                              ...u,
+                              displayDate: u.date.split('-').slice(1).join('/')
+                            }))}
+                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#242D36" vertical={false} />
+                            <XAxis dataKey="displayDate" stroke="#64748B" fontSize={10} tickLine={false} />
+                            <YAxis stroke="#64748B" fontSize={10} tickLine={false} unit="GB" />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#141B22', borderColor: '#2D3742', borderRadius: '6px', fontSize: '11px', color: '#F1F5F9' }}
+                            />
+                            <Legend wrapperStyle={{ fontSize: '11px', color: '#94A3B8' }} />
+                            <Bar dataKey="priority_gb" name="Prioridad" stackId="a" fill="#38A169" />
+                            <Bar dataKey="opt_in_priority_gb" name="Opt-In Excedente" stackId="a" fill="#F39200" />
+                            <Bar dataKey="standard_gb" name="Estándar" stackId="a" fill="#3182CE" radius={[3, 3, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
+
+              {/* TAB 3: CONTROL REMOTO */}
+              {activeTab === 'actions' && (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-md bg-[#141B22] border border-[#2D3742]">
+                    <h3 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider mb-1">
+                      Instrucciones Operativas hacia Starlink Backoffice
+                    </h3>
+                    <p className="text-xs text-[#94A3B8] mb-4">
+                      Todas las acciones críticas requieren diálogo de doble confirmación interactivo antes de ejecutarse.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Reboot Action Card */}
+                      <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
+                            <RotateCw className="w-4 h-4 text-[#E53E3E]" />
+                            <span>Reinicio Remoto de Antena</span>
+                          </div>
+                          <p className="text-[11px] text-[#94A3B8] mb-3">
+                            Fuerza un reboot del hardware satelital. Provoca corte temporal de servicio de 2 a 5 minutos.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => onRequestReboot(detail)}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(229,62,62,0.16)] hover:bg-[#E53E3E] text-[#E53E3E] hover:text-white border border-[#E53E3E]/30 text-xs font-bold transition-colors"
+                        >
+                          <RotateCw className="w-3.5 h-3.5" />
+                          <span>Reiniciar Antena</span>
+                        </button>
+                      </div>
+
+                      {/* Opt-In Action Card */}
+                      <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
+                            <Sliders className="w-4 h-4 text-[#F39200]" />
+                            <span>Política Data Opt-In (Overage)</span>
+                          </div>
+                          <p className="text-[11px] text-[#94A3B8] mb-3">
+                            Habilita o deshabilita la compra de datos prioritarios automáticos al superar la cuota del contrato.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => onRequestOptIn(detail)}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(243,146,0,0.16)] hover:bg-[#F39200] text-[#F39200] hover:text-slate-950 border border-[rgba(243,146,0,0.3)] text-xs font-bold transition-colors"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                          <span>Configurar Opt-In</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : null}
         </div>

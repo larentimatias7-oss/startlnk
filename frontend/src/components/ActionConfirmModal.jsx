@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, RotateCw, Sliders, X, CheckCircle } from 'lucide-react';
+import { AlertTriangle, RotateCw, Sliders, X, CheckCircle2 } from 'lucide-react';
 
 export default function ActionConfirmModal({
   isOpen,
@@ -49,57 +49,59 @@ export default function ActionConfirmModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-slate-950 border border-white/10 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl relative">
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg w-full max-w-md p-5 shadow-2xl relative">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white"
+          className="absolute right-3.5 top-3.5 p-1 rounded-md text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Icon & Title */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className={`p-3 rounded-xl border ${
-            isReboot ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+        <div className="flex items-center gap-3 mb-3.5">
+          <div className={`p-2.5 rounded-md border ${
+            isReboot
+              ? 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border-[#E53E3E]/30'
+              : 'bg-[rgba(243,146,0,0.16)] text-[#F39200] border-[rgba(243,146,0,0.3)]'
           }`}>
-            {isReboot ? <RotateCw className="w-6 h-6" /> : <Sliders className="w-6 h-6" />}
+            {isReboot ? <RotateCw className="w-5 h-5" /> : <Sliders className="w-5 h-5" />}
           </div>
           <div>
-            <h3 className="text-base font-black text-white">
-              {isReboot ? 'Confirmar Reinicio de Terminal' : 'Configurar Data Opt-In'}
+            <h3 className="text-sm font-bold text-[#F1F5F9]">
+              {isReboot ? 'Confirmar Reinicio de Antena' : 'Configurar Política Data Opt-In'}
             </h3>
-            <p className="text-xs text-slate-400 font-mono">
+            <p className="text-xs text-[#94A3B8] font-mono">
               {target.nickname || target.device_id}
             </p>
           </div>
         </div>
 
         {/* Warning Details */}
-        <div className="space-y-3 mb-5 text-xs">
+        <div className="space-y-3 mb-4 text-xs">
           {isReboot ? (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 flex items-start gap-2.5 leading-relaxed">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="p-3 rounded-md bg-[rgba(229,62,62,0.12)] border border-[#E53E3E]/30 text-[#F1F5F9] flex items-start gap-2.5 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-[#E53E3E] shrink-0 mt-0.5" />
               <span>
-                <strong>Atención:</strong> Esta acción enviará una instrucción de reinicio por hardware a la antena Starlink. El enlace satelital se desconectará temporalmente durante <strong>2 a 5 minutos</strong>.
+                <strong>Precaución operativa:</strong> Se enviará un comando de reinicio directo al terminal Starlink. El enlace satelital se desconectará temporalmente durante <strong>2 a 4 minutos</strong>.
               </span>
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 flex items-start gap-2.5 leading-relaxed">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="p-3 rounded-md bg-[rgba(243,146,0,0.12)] border border-[rgba(243,146,0,0.3)] text-[#F1F5F9] flex items-start gap-2.5 leading-relaxed">
+                <AlertTriangle className="w-4 h-4 text-[#F39200] shrink-0 mt-0.5" />
                 <span>
-                  El modo <strong>Opt-In</strong> autoriza el consumo prioritario continuo luego de agotar la cuota mensual del plan, generando cargos de excedente según la tarifa contratada.
+                  El modo <strong>Opt-In</strong> permite que la línea continúe consumiendo tráfico prioritario una vez alcanzado el 100% de la cuota mensual, facturándose como sobreconsumo.
                 </span>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-900 border border-white/5 flex items-center justify-between">
-                <span className="text-slate-300 font-semibold">Estado de Overage Opt-In:</span>
+              <div className="p-2.5 rounded-md bg-[#141B22] border border-[#2D3742] flex items-center justify-between">
+                <span className="text-[#CBD5E1] font-semibold text-xs">Estado de Overage:</span>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setOptInValue(true)}
-                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                      optInValue ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                    className={`px-3 py-1 rounded-md font-bold text-xs transition-colors ${
+                      optInValue ? 'bg-[#38A169] text-white' : 'bg-[#1A222B] text-[#94A3B8] border border-[#2D3742]'
                     }`}
                   >
                     Habilitado
@@ -107,8 +109,8 @@ export default function ActionConfirmModal({
                   <button
                     type="button"
                     onClick={() => setOptInValue(false)}
-                    className={`px-3 py-1 rounded-lg font-bold text-xs transition-all ${
-                      !optInValue ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-400'
+                    className={`px-3 py-1 rounded-md font-bold text-xs transition-colors ${
+                      !optInValue ? 'bg-[#E53E3E] text-white' : 'bg-[#1A222B] text-[#94A3B8] border border-[#2D3742]'
                     }`}
                   >
                     Deshabilitado
@@ -120,25 +122,25 @@ export default function ActionConfirmModal({
 
           {/* Feedback messages */}
           {result && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 shrink-0" />
+            <div className="p-2.5 rounded-md bg-[rgba(56,161,105,0.16)] border border-[#38A169]/40 text-[#38A169] flex items-center gap-2 font-semibold">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>{result}</span>
             </div>
           )}
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400">
+            <div className="p-2.5 rounded-md bg-[rgba(229,62,62,0.16)] border border-[#E53E3E]/40 text-[#E53E3E] font-semibold">
               {error}
             </div>
           )}
         </div>
 
-        {/* Buttons */}
-        <div className="flex items-center justify-end gap-2.5">
+        {/* Action Buttons */}
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#2D3742]">
           <button
             onClick={onClose}
             disabled={loading}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs transition-all"
+            className="px-3 py-1.5 rounded-md bg-[#141B22] hover:bg-[#222C38] text-[#CBD5E1] font-semibold text-xs border border-[#2D3742] transition-colors"
           >
             {result ? 'Cerrar' : 'Cancelar'}
           </button>
@@ -147,14 +149,14 @@ export default function ActionConfirmModal({
             <button
               onClick={handleExecute}
               disabled={loading}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-xs shadow-lg transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-colors shadow-sm ${
                 isReboot
-                  ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
-                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                  ? 'bg-[#E53E3E] hover:bg-[#C53030] text-white'
+                  : 'bg-[#F39200] hover:bg-[#D98200] text-slate-950'
               } disabled:opacity-50`}
             >
               {loading && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
-              <span>{loading ? 'Ejecutando...' : isReboot ? 'Confirmar y Reiniciar' : 'Guardar Configuración'}</span>
+              <span>{loading ? 'Ejecutando...' : isReboot ? 'Confirmar Reinicio' : 'Guardar Política'}</span>
             </button>
           )}
         </div>

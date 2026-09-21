@@ -1,10 +1,10 @@
 import React from 'react';
-import { Wifi, WifiOff, HardDrive, AlertOctagon, TrendingUp, Gauge, Radio } from 'lucide-react';
+import { Radio, HardDrive, Gauge, AlertOctagon, WifiOff } from 'lucide-react';
 
 export default function KpiCards({ kpis, terminals }) {
   if (!kpis) return null;
 
-  // Compute average ping & total throughput from online terminals
+  // Cálculos de latencia promedio y downlink agregado de terminales online
   const onlineTerminals = terminals?.filter(t => t.is_online) || [];
   const avgPing = onlineTerminals.length > 0
     ? (onlineTerminals.reduce((acc, t) => acc + (t.ping_ms || 0), 0) / onlineTerminals.length).toFixed(1)
@@ -12,75 +12,79 @@ export default function KpiCards({ kpis, terminals }) {
   const totalDownlink = onlineTerminals.reduce((acc, t) => acc + (t.downlink_mbps || 0), 0).toFixed(0);
 
   const quotaPercent = kpis.fleet_quota_consumed_percent || 0;
-  const isHighQuota = quotaPercent >= 80;
+  const isHighQuota = quotaPercent >= 80 && quotaPercent < 100;
   const isCriticalQuota = quotaPercent >= 100;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {/* 1. Terminales y Conectividad */}
-      <div className="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+      {/* 1. Flota de Terminales */}
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg p-4 hover:border-[#F39200]/40 transition-colors shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
             Flota de Terminales
           </span>
-          <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <Radio className="w-5 h-5" />
+          <div className="p-1.5 rounded-md bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)]">
+            <Radio className="w-4 h-4" />
           </div>
         </div>
 
         <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-3xl font-black text-white tracking-tight">
+          <span className="text-2xl lg:text-3xl font-black text-[#F1F5F9] font-mono tracking-tight">
             {kpis.total_terminals}
           </span>
-          <span className="text-xs text-slate-400 font-medium">enlaces activos</span>
+          <span className="text-xs text-[#94A3B8]">enlaces registrados</span>
         </div>
 
-        <div className="flex items-center gap-3 pt-2 border-t border-white/5 text-xs">
-          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        <div className="flex items-center justify-between pt-2.5 border-t border-[#242D36] text-xs">
+          <div className="flex items-center gap-1.5 text-[#38A169] font-semibold">
+            <span className="w-2 h-2 rounded-full bg-[#38A169]"></span>
             <span>{kpis.online_count} Online</span>
           </div>
-          {kpis.offline_count > 0 && (
-            <div className="flex items-center gap-1 text-rose-400 font-semibold">
+          {kpis.offline_count > 0 ? (
+            <div className="flex items-center gap-1 text-[#E53E3E] font-semibold">
               <WifiOff className="w-3.5 h-3.5" />
               <span>{kpis.offline_count} Offline</span>
             </div>
+          ) : (
+            <span className="text-[#38A169] text-[11px] font-semibold">100% Operativo</span>
           )}
-          <span className="ml-auto text-slate-400 font-mono">
+          <span className="text-[#94A3B8] font-mono text-[11px]">
             {kpis.availability_percent}% Disp.
           </span>
         </div>
       </div>
 
-      {/* 2. Consumo Total de Flota */}
-      <div className="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+      {/* 2. Consumo Flota Mensual */}
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg p-4 hover:border-[#F39200]/40 transition-colors shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Consumo Flota (Mes)
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+            Consumo Mensual Flota
           </span>
-          <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            <HardDrive className="w-5 h-5" />
+          <div className="p-1.5 rounded-md bg-[rgba(49,130,206,0.16)] text-[#3182CE] border border-[rgba(49,130,206,0.3)]">
+            <HardDrive className="w-4 h-4" />
           </div>
         </div>
 
         <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-3xl font-black text-white tracking-tight">
+          <span className="text-2xl lg:text-3xl font-black text-[#F1F5F9] font-mono tracking-tight">
             {kpis.total_consumed_month_gb.toLocaleString()}
           </span>
-          <span className="text-xs text-slate-400 font-medium">/ {kpis.total_quota_month_gb.toLocaleString()} GB</span>
+          <span className="text-xs text-[#94A3B8] font-mono">/ {kpis.total_quota_month_gb.toLocaleString()} GB</span>
         </div>
 
-        <div className="pt-2 border-t border-white/5">
-          <div className="flex justify-between text-xs mb-1.5 font-medium">
-            <span className="text-slate-400">Cuota Utilizada</span>
-            <span className={isCriticalQuota ? 'text-rose-400 font-bold' : isHighQuota ? 'text-amber-400' : 'text-cyan-400'}>
+        <div className="pt-2.5 border-t border-[#242D36]">
+          <div className="flex justify-between text-xs mb-1.5">
+            <span className="text-[#94A3B8]">Cuota Utilizada</span>
+            <span className={`font-mono font-bold ${
+              isCriticalQuota ? 'text-[#E53E3E]' : isHighQuota ? 'text-[#DD6B20]' : 'text-[#F39200]'
+            }`}>
               {quotaPercent}%
             </span>
           </div>
-          <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div className="w-full h-1.5 bg-[#141B22] rounded-full overflow-hidden border border-[#242D36]">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                isCriticalQuota ? 'bg-rose-500' : isHighQuota ? 'bg-amber-400' : 'bg-gradient-to-r from-cyan-500 to-emerald-400'
+                isCriticalQuota ? 'bg-[#E53E3E]' : isHighQuota ? 'bg-[#DD6B20]' : 'bg-[#F39200]'
               }`}
               style={{ width: `${Math.min(quotaPercent, 100)}%` }}
             />
@@ -88,64 +92,68 @@ export default function KpiCards({ kpis, terminals }) {
         </div>
       </div>
 
-      {/* 3. Rendimiento y Salud RF */}
-      <div className="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-blue-500/30 transition-all">
+      {/* 3. Rendimiento RF Promedio */}
+      <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg p-4 hover:border-[#F39200]/40 transition-colors shadow-sm">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
             Rendimiento RF Promedio
           </span>
-          <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <Gauge className="w-5 h-5" />
+          <div className="p-1.5 rounded-md bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[rgba(56,161,105,0.3)]">
+            <Gauge className="w-4 h-4" />
           </div>
         </div>
 
         <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-3xl font-black text-white tracking-tight">
+          <span className="text-2xl lg:text-3xl font-black text-[#F1F5F9] font-mono tracking-tight">
             {avgPing}
           </span>
-          <span className="text-xs text-slate-400 font-medium">ms latencia</span>
+          <span className="text-xs text-[#94A3B8]">ms latencia</span>
         </div>
 
-        <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-slate-400">
-          <span>Downlink Agregado:</span>
-          <span className="font-bold text-blue-400 font-mono">
+        <div className="flex items-center justify-between pt-2.5 border-t border-[#242D36] text-xs">
+          <span className="text-[#94A3B8]">Throughput Downlink:</span>
+          <span className="font-bold text-[#3182CE] font-mono">
             {totalDownlink} Mbps
           </span>
         </div>
       </div>
 
-      {/* 4. Alertas de Cuota & Excedente */}
-      <div className={`glass-panel rounded-2xl p-5 relative overflow-hidden group transition-all ${
-        kpis.terminals_in_critical > 0 ? 'border-rose-500/40 glow-rose' : kpis.terminals_in_warning > 0 ? 'border-amber-500/30' : ''
+      {/* 4. Alertas de Cuota & Umbrales */}
+      <div className={`bg-[#1A222B] border rounded-lg p-4 transition-colors shadow-sm ${
+        kpis.terminals_in_critical > 0
+          ? 'border-[#E53E3E]/60 bg-[rgba(229,62,62,0.06)]'
+          : kpis.terminals_in_warning > 0
+          ? 'border-[#DD6B20]/60'
+          : 'border-[#2D3742]'
       }`}>
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
             Alertas de Cuota
           </span>
-          <div className={`p-2 rounded-xl border ${
+          <div className={`p-1.5 rounded-md border ${
             kpis.terminals_in_critical > 0
-              ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-              : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+              ? 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border-[#E53E3E]/40'
+              : 'bg-[rgba(221,107,32,0.16)] text-[#DD6B20] border-[#DD6B20]/40'
           }`}>
-            <AlertOctagon className="w-5 h-5" />
+            <AlertOctagon className="w-4 h-4" />
           </div>
         </div>
 
         <div className="flex items-baseline gap-2 mb-2">
-          <span className={`text-3xl font-black tracking-tight ${
-            kpis.terminals_in_critical > 0 ? 'text-rose-400' : kpis.terminals_in_warning > 0 ? 'text-amber-400' : 'text-emerald-400'
+          <span className={`text-2xl lg:text-3xl font-black font-mono tracking-tight ${
+            kpis.terminals_in_critical > 0 ? 'text-[#E53E3E]' : kpis.terminals_in_warning > 0 ? 'text-[#DD6B20]' : 'text-[#38A169]'
           }`}>
             {kpis.terminals_in_critical + kpis.terminals_in_warning}
           </span>
-          <span className="text-xs text-slate-400 font-medium">enlaces en umbral</span>
+          <span className="text-xs text-[#94A3B8]">enlaces en umbral</span>
         </div>
 
-        <div className="flex items-center gap-3 pt-2 border-t border-white/5 text-xs">
-          <span className="text-rose-400 font-semibold">
+        <div className="flex items-center gap-3 pt-2.5 border-t border-[#242D36] text-xs">
+          <span className="text-[#E53E3E] font-semibold font-mono">
             {kpis.terminals_in_critical} al 100%
           </span>
-          <span className="text-slate-600">|</span>
-          <span className="text-amber-400 font-semibold">
+          <span className="text-[#2D3742]">|</span>
+          <span className="text-[#DD6B20] font-semibold font-mono">
             {kpis.terminals_in_warning} al 80%
           </span>
         </div>
