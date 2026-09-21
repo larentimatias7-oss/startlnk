@@ -24,6 +24,11 @@ services:
     restart: unless-stopped
     expose:
       - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.starlink-frontend.rule=Host(`starlink.milicic.local`)"
+      - "traefik.http.services.starlink-frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
     depends_on:
       - backend
     networks:
