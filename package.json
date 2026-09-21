@@ -1,0 +1,14 @@
+{
+  "name": "tsm-starlink-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "cmd /c \"cd frontend && npm run dev\"",
+    "dev:backend": "backend\\.venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "build": "cmd /c \"cd frontend && npm run build\"",
+    "test:backend": "backend\\.venv\\Scripts\\python.exe backend/test_api_endpoints.py",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  }
+}
