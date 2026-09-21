@@ -429,7 +429,8 @@ tsmpatagonia/
 ├── docs/                           # Suite de Documentación Técnica y Operativa
 │   ├── ARCHITECTURE.md             # Arquitectura de software, flujos y modelo de datos
 │   ├── API_REFERENCE.md            # Referencia exhaustiva de endpoints y payloads
-│   └── DEPLOYMENT.md               # Guía de producción con Dokploy, Traefik, SSL y backups
+│   ├── DEPLOYMENT.md               # Guía de producción con Dokploy, Traefik, SSL y backups
+│   └── SECURITY_AND_SECRETS.md     # Gestión y protección de secretos, threat model
 ├── docker-compose.yml              # Orquestación Dokploy con etiquetas Traefik
 ├── Makefile                        # Atajos de terminal Make para Linux/macOS
 ├── package.json                    # Atajos de npm unificados en la raíz
@@ -446,7 +447,8 @@ tsmpatagonia/
 Para profundizar en el diseño e ingeniería del proyecto, consulta los documentos de la suite:
 - [Arquitectura de Software y Ciclo de Vida JWT](file:///c:/antigravity/tsmpatagonia/docs/ARCHITECTURE.md)
 - [Referencia Completa de la API](file:///c:/antigravity/tsmpatagonia/docs/API_REFERENCE.md)
-- [Guía de Despliegue en Producción y Seguridad](file:///c:/antigravity/tsmpatagonia/docs/DEPLOYMENT.md)
+- [Guía de Despliegue en Producción y Operaciones](file:///c:/antigravity/tsmpatagonia/docs/DEPLOYMENT.md)
+- [Seguridad, Resguardo de Secretos y Threat Model](file:///c:/antigravity/tsmpatagonia/docs/SECURITY_AND_SECRETS.md)
 - [Especificación Reversa de TSM ECHO API](file:///c:/antigravity/tsmpatagonia/starlink_api_docs.md)
 
 ---

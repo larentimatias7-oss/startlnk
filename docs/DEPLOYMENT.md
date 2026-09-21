@@ -396,30 +396,23 @@ En caso de requerir restauración por corrupción de datos o migración de servi
 
 ---
 
-## 5. Rotación Segura de Credenciales y Secretos
+## 6. Rotación Segura de Credenciales y Secretos
 
-Cuando se actualice la contraseña de la cuenta de TSM ECHO (`ECHO_PASSWORD`):
+Para conocer el modelo de amenazas detallado, matriz de control y arquitectura de protección de contraseñas, consulta la guía especializada:
+👉 [**docs/SECURITY_AND_SECRETS.md**](file:///c:/antigravity/tsmpatagonia/docs/SECURITY_AND_SECRETS.md).
 
-1. **Actualizar el archivo `.env`**:
-   Edita `.env` en el servidor con el nuevo valor de `ECHO_PASSWORD`.
-2. **Aplicar los cambios sin caída de servicio**:
+### Procedimiento en Dokploy
+1. **Actualizar en el Panel**: Ve a Dokploy -> Aplicación `startlinkmonitor-milicic-dothf2` -> pestaña **Environment**.
+2. **Reemplazar la variable**: Modifica `ECHO_PASSWORD=NuevaPassword2026!`.
+3. **Redesplegar**: Presiona **Save** y luego **Redeploy**.
+4. **Validación**:
    ```bash
-   # Recrea únicamente el contenedor backend aplicando las nuevas variables:
-   docker compose -f docker-compose.prod.yml up -d --no-deps backend
-   ```
-3. **Comprobar la re-autenticación**:
-   Inspecciona los logs del backend para confirmar el nuevo login exitoso:
-   ```bash
-   docker compose logs backend | grep "Successfully authenticated to TSM ECHO"
-   ```
-4. **Disparar una sincronización de verificación**:
-   ```bash
-   curl -X POST http://localhost:8000/api/terminals/sync
+   curl -s http://starlink.milicic.local/api/health | grep '"echo_credentials_configured":true'
    ```
 
 ---
 
-## 6. Supervisión y Healthchecks
+## 7. Supervisión y Healthchecks
 
 Para integrar el dashboard con herramientas de monitoreo externas (Zabbix, Prometheus, Datadog, Uptime Kuma):
 
