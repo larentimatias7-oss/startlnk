@@ -291,3 +291,43 @@ erDiagram
 #### Tabla `sync_logs`
 - Bitácora de auditoría para supervisar la salud del worker en segundo plano y diagnosticar problemas de conectividad upstream.
 - Permite al frontend determinar con precisión cuándo fue el último refresco exitoso.
+
+---
+
+## 6. Sistema de Diseño Milicic UI & Arquitectura de Componentes
+
+La capa de frontend implementa el sistema de diseño corporativo **Milicic UI** ([`.agent/skills/diseno-UI-milicic/SKILL.md`](file:///c:/antigravity/tsmpatagonia/.agent/skills/diseno-UI-milicic/SKILL.md)):
+
+### 6.1. Tokens y Variables Visuales
+- **Canvas Base (`#0F141A`)**: Fondo oscuro profundo con tinte pizarra.
+- **Superficie de Tarjetas (`#1A222B`)**: Contenedores elevados con bordes de contraste `#2A3441`.
+- **Naranja Milicic (`#F39200`)**: Color primario para botones de acción, acentos de selección y líneas de tendencia destacadas.
+- **Estados Operativos**:
+  - `Activo / Online`: Verde esmeralda `#10B981` con pulso lumínico.
+  - `Offline / Crítico`: Rojo rubí `#EF4444`.
+  - `Advertencia / Cuota > 80%`: Ámbar `#F59E0B`.
+
+### 6.2. Componentes Desacoplados
+- **[`MilicicLogo.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/MilicicLogo.jsx)**: Componente corporativo optimizado para renderizar el isotipo de franjas y texto institucional sin artefactos ni degradación por escalado.
+- **[`Header.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Header.jsx)**: Header corporativo con badge de estado del upstream ECHO y botón de sincronización manual interactivo con spinner.
+- **[`KpiCards.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/KpiCards.jsx)**: 4 métricas directas: Disponibilidad de flota, Terminales online/offline, Consumo global en GB y Estado de cuotas prioritarias.
+- **[`FleetChart.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/FleetChart.jsx)**: Gráfico Recharts con gradientes de color corporativos Milicic, tooltips personalizados y formato de fechas dinámico.
+- **[`TerminalTable.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalTable.jsx)**: Tabla de inventario de alto rendimiento con barra de búsqueda reactiva y filtros por estado.
+- **[`TerminalDetailModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalDetailModal.jsx)**: Ficha técnica emergente con métricas de RF en vivo (SNR, Azimuth, Elevación, Ping) e histograma de consumo diario.
+- **[`ActionConfirmModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/ActionConfirmModal.jsx)**: Modal de doble confirmación para salvaguardar acciones críticas (*Reboot* y *Data Opt-In*).
+- **[`Toast.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Toast.jsx)**: Notificaciones flotantes no invasivas para confirmación de comandos y avisos de red.
+
+---
+
+## 7. Arquitectura de Red y Enrutamiento Dokploy + Traefik
+
+El sistema en producción opera en un entorno contenerizado administrado por Dokploy:
+
+1. **Ingress Traefik Dinámico**: Traefik escucha peticiones en los puertos 80 y 443 del host. Mediante su proveedor de Docker conectado a `/var/run/docker.sock`, detecta automáticamente el contenedor `tsm_starlink_frontend` a través de sus etiquetas:
+   - `traefik.enable=true`
+   - `traefik.http.routers.starlink-frontend.rule=Host('starlink.milicic.local')`
+   - `traefik.docker.network=dokploy-network`
+2. **Red Interna `dokploy-network`**: Permite la comunicación segura y directa entre Traefik y el frontend sin exponer puertos al sistema operativo anfitrión.
+3. **Servidor Web Nginx Interno**: El contenedor de frontend ejecuta Nginx en el puerto 80, sirviendo los activos estáticos compilados de React e implementando un proxy inverso para la ruta `/api/` hacia `http://backend:8000/api/`.
+4. **Persistencia Transaccional**: El backend monta el volumen nombrado de Docker `starlink_data` en `/app/data`, asegurando que la base de datos `starlink_dashboard.db` conserve los históricos aun cuando los contenedores se reconstruyan o actualicen.
+

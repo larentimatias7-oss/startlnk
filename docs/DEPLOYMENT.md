@@ -1,177 +1,218 @@
 # Guía de Despliegue en Producción, Seguridad y Operaciones
 
-Esta guía describe los procedimientos operativos estándar (SOP) para poner en producción, asegurar, monitorear y respaldar la plataforma **TSM Starlink Fleet & Usage Monitor**.
+Esta guía describe los procedimientos operativos estándar (SOP) para poner en producción, asegurar, monitorear y respaldar la plataforma **Starlink Fleet & Usage Monitor (Milicic / TSM Patagonia)**.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 - [1. Arquitectura de Despliegue en Producción](#1-arquitectura-de-despliegue-en-producción)
-- [2. Despliegue con Docker y Docker Compose](#2-despliegue-con-docker-y-docker-compose)
-  - [2.1. Variables de Entorno Productivas](#21-variables-de-entorno-productivas)
-  - [2.2. Configuración de docker-compose.prod.yml](#22-configuración-de-docker-composeprodyml)
-  - [2.3. Comandos de Operación](#23-comandos-de-operación)
-- [3. Configuración de Reverse Proxy y Terminación TLS/SSL](#3-configuración-de-reverse-proxy-y-terminación-tlsssl)
-  - [Opción A: Servidor Nginx con Let's Encrypt (Certbot)](#opción-a-servidor-nginx-con-lets-encrypt-certbot)
-  - [Opción B: Traefik v3 con Generación Automática de Certificados](#opción-b-traefik-v3-con-generación-automática-de-certificados)
-- [4. Estrategia de Backup y Recuperación de SQLite](#4-estrategia-de-backup-y-recuperación-de-sqlite)
-  - [4.1. Respaldo en Caliente con VACUUM INTO](#41-respaldo-en-caliente-con-vacuum-into)
-  - [4.2. Script Automatizado para Linux (Cron)](#42-script-automatizado-para-linux-cron)
-  - [4.3. Script Automatizado para Windows (PowerShell)](#43-script-automatizado-para-windows-powershell)
-  - [4.4. Procedimiento de Restauración (Disaster Recovery)](#44-procedimiento-de-restauración-disaster-recovery)
-- [5. Rotación Segura de Credenciales y Secretos](#5-rotación-segura-de-credenciales-y-secretos)
-- [6. Supervisión y Healthchecks](#6-supervisión-y-healthchecks)
+- [2. Despliegue en Dokploy con Traefik v3 (Método Principal)](#2-despliegue-en-dokploy-con-traefik-v3-método-principal)
+  - [2.1. Configuración de docker-compose.yml](#21-configuración-de-docker-composeyml)
+  - [2.2. Enrutamiento Traefik y Bypass de Validación DNS](#22-enrutamiento-traefik-y-bypass-de-validación-dns)
+  - [2.3. Gestión de Secretos en Dokploy](#23-gestión-de-secretos-en-dokploy)
+- [3. Pipeline de Integración Continua (Gitea Actions)](#3-pipeline-de-integración-continua-gitea-actions)
+  - [3.1. Definición del Workflow ci.yaml](#31-definición-del-workflow-ciyaml)
+  - [3.2. Configuración del Runner Self-Hosted (dokploy-runner)](#32-configuración-del-runner-self-hosted-dokploy-runner)
+- [4. Despliegue Standalone Alternativo (Docker Compose & Nginx Tradicional)](#4-despliegue-standalone-alternativo-docker-compose--nginx-tradicional)
+- [5. Estrategia de Backup y Recuperación de SQLite](#5-estrategia-de-backup-y-recuperación-de-sqlite)
+  - [5.1. Respaldo en Caliente con VACUUM INTO](#51-respaldo-en-caliente-con-vacuum-into)
+  - [5.2. Script Automatizado para Linux (Cron)](#52-script-automatizado-para-linux-cron)
+  - [5.3. Script Automatizado para Windows (PowerShell)](#53-script-automatizado-para-windows-powershell)
+  - [5.4. Procedimiento de Restauración (Disaster Recovery)](#54-procedimiento-de-restauración-disaster-recovery)
+- [6. Rotación Segura de Credenciales y Secretos](#6-rotación-segura-de-credenciales-y-secretos)
+- [7. Supervisión y Healthchecks](#7-supervisión-y-healthchecks)
 
 ---
 
 ## 1. Arquitectura de Despliegue en Producción
 
-En entornos de producción, la solución se distribuye en una topología aislada protegida por un Reverse Proxy con terminación SSL/TLS:
+En el entorno productivo de **Milicic / TSM Patagonia**, la aplicación se orquesta sobre la plataforma PaaS **Dokploy**, utilizando **Traefik v3** como Ingress Controller y proxy inverso dinámico:
 
 ```mermaid
 graph TD
-    Client["Navegador Cliente (HTTPS / 443)"]
+    Client["Navegador Operador / NOC\nhttp://starlink.milicic.local"]
     
-    subgraph Host ["Servidor de Producción (Linux / Windows Server)"]
-        subgraph Ingress ["Capa de Entrada y Cifrado"]
-            Proxy["Reverse Proxy (Nginx / Traefik) con Certificado TLS"]
+    subgraph Host ["Servidor Dokploy (172.27.210.154 / 10.0.1.3)"]
+        subgraph Ingress ["Traefik v3 (Dokploy Ingress Controller)"]
+            Traefik["Traefik Proxy (Puerto 80 / 443)\nDetecta contenedor por labels de Docker"]
         end
 
-        subgraph Containers ["Red Interna Docker (bridge tsm-network)"]
-            Frontend["tsm-starlink-frontend: Puerto 80 (Nginx Interno)"]
-            Backend["tsm-starlink-backend: Puerto 8000 (FastAPI / Uvicorn)"]
+        subgraph DockerNet ["Red Compartida: dokploy-network"]
+            Frontend["tsm_starlink_frontend (Nginx)\nPuerto interno 80\nSirve React SPA + Proxy /api/"]
+            Backend["tsm_starlink_backend (FastAPI / Uvicorn)\nPuerto interno 8000\nWorker APScheduler 15m"]
         end
 
-        subgraph Storage ["Almacenamiento Persistente"]
-            DBVolume[("Volumen Docker / Carpeta Host: starlink_dashboard.db")]
-            BackupDir[("Directorio de Backups: /var/backups/tsm_starlink")]
+        subgraph Storage ["Volumen Persistente"]
+            DBVolume[("Volumen Docker: starlink_data\n/app/data/starlink_dashboard.db")]
         end
     end
 
-    subgraph External ["Plataforma TSM ECHO"]
+    subgraph CI_CD ["Infraestructura Gitea"]
+        GiteaServer["Gitea (172.27.210.154:3001)"]
+        Runner["Gitea Runner (dokploy-runner)"]
+        GiteaServer -->|Trigger push main| Runner
+    end
+
+    subgraph Upstream ["Plataforma TSM ECHO"]
         EchoAPI["https://echo.tsmpatagonia.com.ar/api"]
     end
 
-    Client -->|HTTPS / WSS| Proxy
-    Proxy -->|HTTP estáticos / SPA| Frontend
-    Proxy -->|HTTP /api/ proxy_pass| Backend
+    Client -->|HTTP Host: starlink.milicic.local| Traefik
+    Traefik -->|Proxy a frontend:80| Frontend
+    Frontend -->|Proxy pass /api/ a backend:8000| Backend
     Backend --> DBVolume
-    Backend -->|HTTPS Outbound Bearer JWT| EchoAPI
-    DBVolume -.->|VACUUM INTO Backup diario| BackupDir
+    Backend -->|HTTPS Bearer JWT Outbound| EchoAPI
+    Runner -->|CI Build & Tests| GiteaServer
 ```
 
 ---
 
-## 2. Despliegue con Docker y Docker Compose
+## 2. Despliegue en Dokploy con Traefik v3 (Método Principal)
 
-### 2.1. Variables de Entorno Productivas
+### 2.1. Configuración de `docker-compose.yml`
 
-Crea un archivo `.env` en el servidor con permisos restrictivos (`chmod 600 .env` en Linux):
-
-```env
-# URL Upstream
-ECHO_BASE_URL=https://echo.tsmpatagonia.com.ar/api
-
-# Credenciales de Servicio Dedicadas
-ECHO_EMAIL=it.infra@milicic.com.ar
-ECHO_PASSWORD=ClaveDeProduccionSuperSegura2026!
-
-# Intervalo del Worker en Minutos
-SYNC_INTERVAL_MINUTES=15
-
-# Ruta interna en el contenedor
-DATABASE_URL=sqlite:////data/starlink_dashboard.db
-
-# Configuración FastAPI
-HOST=0.0.0.0
-PORT=8000
-ENVIRONMENT=production
-```
-
-### 2.2. Configuración de `docker-compose.prod.yml`
-
-Para un entorno productivo con límites de recursos, reinicio automático y volúmenes persistentes, utiliza el siguiente archivo de orquestación:
+El archivo [`docker-compose.yml`](file:///c:/antigravity/tsmpatagonia/docker-compose.yml) en la raíz del repositorio está optimizado para Dokploy:
 
 ```yaml
-version: '3.8'
-
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: tsm-starlink-backend:latest
-    container_name: tsm-starlink-backend
-    restart: always
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: tsm_starlink_backend
+    restart: unless-stopped
+    expose:
+      - "8000"
     env_file:
       - .env
     volumes:
-      # Persistencia de base de datos fuera del ciclo de vida del contenedor
-      - ./data:/data
+      - starlink_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/starlink_dashboard.db
     networks:
-      - tsm-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1.50'
-          memory: 1024M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      - dokploy-network
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    image: tsm-starlink-frontend:latest
-    container_name: tsm-starlink-frontend
-    restart: always
-    ports:
-      - "3000:80"
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: tsm_starlink_frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.starlink-frontend.rule=Host(`starlink.milicic.local`)"
+      - "traefik.http.services.starlink-frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
-      - tsm-network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 256M
+      - dokploy-network
+
+volumes:
+  starlink_data:
 
 networks:
-  tsm-network:
-    driver: bridge
+  dokploy-network:
+    external: true
 ```
 
-### 2.3. Comandos de Operación
+### 2.2. Enrutamiento Traefik y Bypass de Validación DNS
 
-```bash
-# 1. Crear directorio para datos persistentes
-mkdir -p data
+> [!IMPORTANT]
+> **Resolución del error de validación de dominios en Dokploy UI**:
+> En entornos locales o corporativos (redes privadas, VPN o IPs NAT como `172.27.210.154`), la pestaña **Domains** de la interfaz web de Dokploy ejecuta una verificación DNS estricta contra las IPs detectadas en `eth0` (`10.0.1.3` / `179.60.27.226`). Si hay una discrepancia, Dokploy muestra:
+> `Error: Domain resolves to 172.27.210.154 but should point to 179.60.27.226 or 10.0.1.3`
+> y bloquea el switch de activación (dejando la ruta apagada con error 404).
+>
+> **Solución definitiva aplicada:**
+> No se utiliza la pestaña de dominios de Dokploy. Al configurar directamente las etiquetas `labels` de Traefik en `docker-compose.yml`, Traefik detecta el contenedor inmediatamente a través de `/var/run/docker.sock` y activa la regla de enrutamiento para `starlink.milicic.local` sin ninguna interferencia de la interfaz web.
 
-# 2. Construir imágenes e iniciar contenedores
-docker compose -f docker-compose.prod.yml up -d --build
+### 2.3. Gestión de Secretos en Dokploy
 
-# 3. Comprobar salud y estado de los contenedores
-docker compose -f docker-compose.prod.yml ps
+En Dokploy, las variables de entorno de producción no se commitean en Git. Se configuran directamente en la pestaña **Environment Variables** de la aplicación:
 
-# 4. Inspeccionar registros en vivo del backend
-docker compose -f docker-compose.prod.yml logs -f backend
-
-# 5. Detener la aplicación de forma ordenada
-docker compose -f docker-compose.prod.yml down
+```env
+ECHO_BASE_URL=https://echo.tsmpatagonia.com.ar/api
+ECHO_EMAIL=it.infra@milicic.com.ar
+ECHO_PASSWORD=ClaveDeProduccionSuperSegura2026!
+SYNC_INTERVAL_MINUTES=15
+DATABASE_URL=sqlite:////app/data/starlink_dashboard.db
+HOST=0.0.0.0
+PORT=8000
 ```
 
 ---
 
-## 3. Configuración de Reverse Proxy y Terminación TLS/SSL
+## 3. Pipeline de Integración Continua (Gitea Actions)
+
+### 3.1. Definición del Workflow `ci.yaml`
+
+El archivo [`.gitea/workflows/ci.yaml`](file:///c:/antigravity/tsmpatagonia/.gitea/workflows/ci.yaml) automatiza la validación técnica en cada push:
+
+```yaml
+name: Build & Test Fleet Monitor
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-check:
+    name: Test FastAPI Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Integration Tests
+        run: |
+          python backend/test_backend.py
+          python backend/test_api_endpoints.py
+
+  frontend-build:
+    name: Build React Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies & Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+```
+
+### 3.2. Configuración del Runner Self-Hosted (`dokploy-runner`)
+
+El runner ejecuta los jobs en contenedores Docker efímeros. Su estado `Inactivo` (o `Idle`) en Gitea indica que se encuentra en espera listo para procesar jobs.
+
+---
+
+## 4. Despliegue Standalone Alternativo (Docker Compose & Nginx Tradicional)
 
 ### Opción A: Servidor Nginx con Let's Encrypt (Certbot)
 

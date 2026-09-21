@@ -1,6 +1,8 @@
-# TSM Starlink Fleet & Usage Monitor
+# Starlink Fleet & Usage Monitor (Milicic / TSM Patagonia)
 
-Plataforma integral, moderna y de nivel productivo para el monitoreo en tiempo real, telemetría de radiofrecuencia (RF) y control de consumos de la flota de enlaces satelitales Starlink de **TSM Patagonia**, integrada directamente con la API upstream de **TSM ECHO** (`https://echo.tsmpatagonia.com.ar/api`).
+Plataforma integral, moderna y de nivel productivo para el monitoreo en tiempo real, telemetría de radiofrecuencia (RF) y control de consumos de la flota de enlaces satelitales Starlink de **Milicic / TSM Patagonia**, integrada directamente con la API upstream de **TSM ECHO** (`https://echo.tsmpatagonia.com.ar/api`).
+
+Diseñada bajo el sistema visual corporativo de **Milicic**, automatizada mediante **Gitea Actions CI/CD** y orquestada para despliegue continuo en **Dokploy** con enrutamiento dinámico vía **Traefik**.
 
 ---
 
@@ -8,13 +10,17 @@ Plataforma integral, moderna y de nivel productivo para el monitoreo en tiempo r
 
 - [Descripción General](#-descripción-general)
 - [Arquitectura del Sistema](#-arquitectura-del-sistema)
+- [Identidad Visual y Diseño (Milicic UI)](#-identidad-visual-y-diseño-milicic-ui)
 - [Requisitos Previos](#-requisitos-previos)
-- [Instalación y Configuración](#-instalación-y-configuración)
+- [Instalación y Configuración Local](#-instalación-y-configuración-local)
   - [Variables de Entorno (.env)](#variables-de-entorno-env)
   - [Consideraciones en Windows (PowerShell & ExecutionPolicy)](#consideraciones-en-windows-powershell--executionpolicy)
 - [Modos de Ejecución](#-modos-de-ejecución)
   - [1. Modo Desarrollo (Local)](#1-modo-desarrollo-local)
   - [2. Despliegue con Docker Compose](#2-despliegue-con-docker-compose)
+- [Despliegue Continuo con Dokploy & Traefik](#-despliegue-continuo-con-dokploy--traefik)
+- [Pipeline de CI/CD con Gitea Actions](#-pipeline-de-cicd-con-gitea-actions)
+- [Seguridad y Gestión de Secretos](#-seguridad-y-gestión-de-secretos)
 - [Endpoints de la API](#-endpoints-de-la-api)
 - [Suite de Pruebas Automatizadas](#-suite-de-pruebas-automatizadas)
 - [Estructura del Repositorio](#-estructura-del-repositorio)
@@ -79,8 +85,27 @@ graph TD
 ### Stack Tecnológico:
 - **Backend**: Python 3.11+ / 3.14 con [FastAPI](https://fastapi.tiangolo.com/), [SQLAlchemy 2.0](https://www.sqlalchemy.org/), [HTTPX](https://www.python-httpx.org/), [APScheduler](https://apscheduler.readthedocs.io/) y [Pydantic v2](https://docs.pydantic.dev/).
 - **Frontend**: [React 18](https://react.dev/) + [Vite](https://vitejs.dev/) + [Tailwind CSS v3](https://tailwindcss.com/) + [Lucide Icons](https://lucide.dev/) + [Recharts](https://recharts.org/).
-- **Persistencia**: [SQLite3](https://www.sqlite.org/) con soporte multihilo (`check_same_thread=False`).
-- **Contenedores**: [Docker](https://www.docker.com/) multi-etapa y [Docker Compose](https://docs.docker.com/compose/).
+- **Sistema de Diseño**: **Milicic UI Design System** con paleta corporativa (Naranja Constructora, Dark Pizarra, Canvas `#0F141A`).
+- **Persistencia**: [SQLite3](https://www.sqlite.org/) con soporte multihilo (`check_same_thread=False`) en volumen persistente `starlink_data`.
+- **Infraestructura & Despliegue**: [Docker Compose](https://docs.docker.com/compose/), [Dokploy](https://dokploy.com/), [Traefik v3](https://traefik.io/) y [Gitea Actions](https://docs.gitea.com/usage/actions/overview).
+
+---
+
+## 🎨 Identidad Visual y Diseño (Milicic UI)
+
+La interfaz fue construida siguiendo los estándares de diseño corporativo de **Milicic S.A.**:
+
+- **Paleta de Colores Corporativa**:
+  - **Naranja Constructora (Primario)**: `#F39200` (Hover: `#D98200`, Active: `#BF7300`).
+  - **Dark Canvas (Fondo)**: `#0F141A` (Gris carbón profundo con tinte azulado).
+  - **Dark Surface (Tarjetas)**: `#1A222B` (Superficie elevada con bordes `#2A3441`).
+  - **Pizarra / Acentos Neutros**: `#4B5563` a `#1F2937`.
+  - **Estados Operativos**: Verde Éxito (`#10B981`), Rojo Crítico (`#EF4444`), Ámbar Advertencia (`#F59E0B`).
+- **Componentes y Elementos Visuales**:
+  - `MilicicLogo.jsx`: Isologotipo corporativo oficial con isotipo de franjas y texto "FLEET MONITOR".
+  - `Toast.jsx`: Notificaciones interactivas de éxito, error y advertencia en tiempo real.
+  - `ActionConfirmModal.jsx`: Modal modal de confirmación con doble validación visual para reboot y opt-in.
+  - Micro-animaciones y bordes refinados con efectos glassmorphism modernos.
 
 ---
 
@@ -203,27 +228,108 @@ El panel de control interactivo estará disponible en: **`http://localhost:5173`
 
 ### 2. Despliegue con Docker Compose
 
-Para ejecutar la solución completa en contenedores aislados y optimizados para producción:
+La solución está completamente contenerizada y lista para producción mediante [docker-compose.yml](file:///c:/antigravity/tsmpatagonia/docker-compose.yml):
 
 ```bash
 # Construir y levantar los contenedores en segundo plano
 docker compose up -d --build
 ```
 
-Servicios desplegados:
-- **`tsm-starlink-frontend`**: Servidor Nginx sirviendo la SPA compilada en el puerto `3000` y proxificando llamadas `/api/` al backend.
-- **`tsm-starlink-backend`**: Contenedor FastAPI Python 3.11 en el puerto `8000` con SQLite mapeado a un volumen persistente.
+Servicios orquestados:
+- **`tsm_starlink_frontend`**: Servidor Nginx que sirve la SPA React compilada en el puerto interno `80` y redirige el tráfico `/api/` hacia el backend.
+- **`tsm_starlink_backend`**: Contenedor FastAPI (Python 3.11) en el puerto interno `8000`, conectado al volumen persistente `starlink_data`.
+- **Red Docker**: Se integran a la red `dokploy-network` (o `bridge` por defecto en entornos independientes).
 
-Para verificar el estado de los servicios:
+Comandos de gestión:
 ```bash
+# Ver estado de los contenedores
 docker compose ps
-docker compose logs -f
-```
 
-Para detener los servicios:
-```bash
+# Inspeccionar logs en vivo
+docker compose logs -f
+
+# Detener los servicios
 docker compose down
 ```
+
+---
+
+## 🚀 Despliegue Continuo con Dokploy & Traefik
+
+El proyecto está configurado para desplegarse automáticamente sobre **Dokploy** utilizando **Traefik v3** como Reverse Proxy:
+
+### 1. Configuración de Red y Enrutamiento Traefik
+En `docker-compose.yml`, el servicio `frontend` declara las etiquetas directas de Traefik para conectarse a la red externa `dokploy-network`:
+
+```yaml
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.starlink-frontend.rule=Host(`starlink.milicic.local`)"
+      - "traefik.http.services.starlink-frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
+```
+
+> [!IMPORTANT]
+> **Bypass de Validación DNS de Dokploy UI**:
+> En entornos locales, VPN o redes corporativas privadas (donde el host se accede mediante una IP interna como `172.27.210.154` que difiere de la IP detectada en `eth0`), la interfaz web de Dokploy bloquea la activación de dominios por discrepancia de DNS.
+> Al declarar las etiquetas nativas de Traefik en `docker-compose.yml`, Traefik lee las reglas directamente desde `/var/run/docker.sock`, enrutando el dominio **`http://starlink.milicic.local`** de manera instantánea y sin requerir la validación de la interfaz de Dokploy.
+
+### 2. Acceso al Servicio
+- **URL Productiva**: [http://starlink.milicic.local](http://starlink.milicic.local)
+- **Resolución Local**: Asegúrate de tener configurada la entrada en el archivo `hosts` de tu máquina cliente:
+  ```text
+  172.27.210.154  starlink.milicic.local
+  ```
+
+---
+
+## 🔄 Pipeline de CI/CD con Gitea Actions
+
+El repositorio integra integración continua automatizada a través de **Gitea Actions** ([.gitea/workflows/ci.yaml](file:///c:/antigravity/tsmpatagonia/.gitea/workflows/ci.yaml)):
+
+### Estructura del Pipeline
+Cada `push` o `pull_request` a la rama `main` ejecuta en paralelo:
+
+1. **`backend-check` (FastAPI + SQLite)**:
+   - Configura entorno Python 3.11 en el runner `dokploy-runner`.
+   - Instala dependencias (`requirements.txt`).
+   - Ejecuta `backend/test_backend.py` (modelos ORM, transacciones e ingesta).
+   - Ejecuta `backend/test_api_endpoints.py` (cobertura completa de endpoints REST).
+2. **`frontend-build` (React 18 + Vite)**:
+   - Configura Node.js 18.x.
+   - Instala paquetes vía `npm ci`.
+   - Valida la compilación estricta de producción (`npm run build`).
+
+```mermaid
+flowchart LR
+    Push["git push origin main"] --> Gitea["Servidor Gitea Local"]
+    Gitea --> Runner["Runner: dokploy-runner"]
+    
+    subgraph CI ["Pipeline CI"]
+        Runner --> BCheck["backend-check\n(pytest / unit tests)"]
+        Runner --> FBuild["frontend-build\n(vite build check)"]
+    end
+    
+    BCheck --> Deploy["Dokploy Redeploy"]
+    FBuild --> Deploy
+    Deploy --> Traefik["Traefik Ingress\nstarlink.milicic.local"]
+```
+
+---
+
+## 🔐 Seguridad y Gestión de Secretos
+
+Para garantizar la seguridad de las credenciales de la plataforma TSM ECHO y los accesos de infraestructura:
+
+1. **Aislamiento de `.env`**:
+   - El archivo `.env` se encuentra estrictamente excluido del repositorio mediante `.gitignore`. Nunca debe incluirse en commits.
+2. **Inyección en Dokploy**:
+   - En producción, las variables sensibles (`ECHO_PASSWORD`, `DATABASE_URL`, etc.) se configuran exclusivamente en la pestaña **Environment Variables** de la aplicación en Dokploy.
+3. **Protección de Datos Locales (SQLite)**:
+   - Los archivos de base de datos (`*.db`, `*.sqlite`) están excluidos de Git para evitar filtrar telemetría interna o generar conflictos binarios en el historial.
+   - En producción, la persistencia se garantiza mediante el volumen nombrado de Docker `starlink_data`.
+4. **Comandos Críticos con Confirmación Explícita**:
+   - Las órdenes de reinicio (*Reboot*) y cambio de cuota (*Data Opt-In*) requieren confirmación en modal con alertas visuales de impacto operacional.
 
 ---
 
@@ -272,6 +378,14 @@ npm.cmd run build
 
 ```text
 tsmpatagonia/
+├── .gitea/
+│   └── workflows/
+│       └── ci.yaml                 # Pipeline de CI/CD automatizado en Gitea Actions
+├── .vscode/
+│   └── settings.json               # Configuración de autorefresco de Git para el IDE
+├── .agent/skills/
+│   └── diseno-UI-milicic/
+│       └── SKILL.md                # Skill y especificación de diseño corporativo Milicic
 ├── backend/                        # Núcleo del servidor y servicios Python
 │   ├── app/
 │   │   ├── core/
@@ -296,25 +410,27 @@ tsmpatagonia/
 ├── frontend/                       # Aplicación SPA React 18
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Header.jsx          # Barra superior, branding y sincronización manual
+│   │   │   ├── Header.jsx          # Barra superior con marca Milicic y sincronización
+│   │   │   ├── MilicicLogo.jsx     # Isotipo y logotipo oficial de Milicic S.A.
 │   │   │   ├── KpiCards.jsx        # 4 tarjetas de métricas críticas y alarmas
 │   │   │   ├── FleetChart.jsx      # Gráfico de área apilado (30 días de flota)
-│   │   │   ├── TerminalTable.jsx   # Tabla de inventario, buscador y badges
+│   │   │   ├── TerminalTable.jsx   # Tabla de inventario, buscador y badges de estado
 │   │   │   ├── TerminalDetailModal.jsx # Telemetría RF y barras de consumo diario
-│   │   │   └── ActionConfirmModal.jsx  # Modal de confirmación para Reboot y Opt-In
+│   │   │   ├── ActionConfirmModal.jsx  # Modal de confirmación para Reboot y Opt-In
+│   │   │   └── Toast.jsx           # Notificaciones toast flotantes interactivas
 │   │   ├── App.jsx                 # Estado global, polling automático y vista principal
-│   │   ├── index.css               # Estilos globales, Tailwind v3 y glassmorphism
+│   │   ├── index.css               # Estilos globales, Tailwind v3 y variables Milicic
 │   │   └── main.jsx                # Montaje de React DOM
 │   ├── Dockerfile                  # Empaquetado Docker multi-etapa con Nginx
 │   ├── nginx.conf                  # Configuración de Nginx para SPA y proxy inverso
 │   ├── package.json                # Dependencias de Node.js del frontend
-│   ├── tailwind.config.js          # Configuración de diseño y paleta de colores
+│   ├── tailwind.config.js          # Configuración de diseño y paleta Milicic
 │   └── vite.config.js              # Configuración de Vite con proxy /api
 ├── docs/                           # Suite de Documentación Técnica y Operativa
 │   ├── ARCHITECTURE.md             # Arquitectura de software, flujos y modelo de datos
 │   ├── API_REFERENCE.md            # Referencia exhaustiva de endpoints y payloads
-│   └── DEPLOYMENT.md               # Guía de producción, reverse proxies, SSL y backups
-├── docker-compose.yml              # Orquestación de contenedores Frontend + Backend
+│   └── DEPLOYMENT.md               # Guía de producción con Dokploy, Traefik, SSL y backups
+├── docker-compose.yml              # Orquestación Dokploy con etiquetas Traefik
 ├── Makefile                        # Atajos de terminal Make para Linux/macOS
 ├── package.json                    # Atajos de npm unificados en la raíz
 ├── starlink_api_docs.md            # Especificación inversa de la API interna de ECHO
