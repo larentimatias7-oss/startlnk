@@ -129,21 +129,37 @@ Crear siempre un componente reutilizable (`MilicicLogo.jsx` o `MilicicLogo.tsx`)
   --milicic-orange-light: #FFF8EE;
   --milicic-slate: #2A343D;
   --milicic-slate-hover: #1E262D;
+
   /* Fondos y Superficies (Light) */
   --bg-page: #F8F9FA;
   --bg-card: #FFFFFF;
   --bg-subtle: #F1F3F5;
   --header-bg: #2A343D;
+
   /* Bordes */
   --border-base: #E2E8F0;
   --border-light: #E5E7EB;
+
   /* Textos */
   --text-primary: #1A2026;
   --text-regular: #4A5568;
   --text-secondary: #718096;
 }
 
-:root[data-theme="dark"],
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-page: #0F141A;
+  --bg-card: #1A222B;
+  --bg-subtle: #141B22;
+  --header-bg: #141A20;
+  --border-base: #2D3742;
+  --border-light: #242D36;
+  --text-primary: #F1F5F9;
+  --text-regular: #CBD5E1;
+  --text-secondary: #94A3B8;
+  --milicic-orange-light: rgba(243, 146, 0, 0.16);
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
