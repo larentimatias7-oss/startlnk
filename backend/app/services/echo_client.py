@@ -30,13 +30,26 @@ class EchoClient:
         return self._user_id
 
     async def get_client(self) -> httpx.AsyncClient:
-        if self._client is None or self._client.is_closed:
+        try:
+            import asyncio
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        client_loop = getattr(self, "_client_loop", None)
+        if self._client is None or self._client.is_closed or (client_loop is not None and client_loop != current_loop):
             self._client = httpx.AsyncClient(timeout=30.0)
+            self._client_loop = current_loop
         return self._client
 
     async def close(self):
         if self._client and not self._client.is_closed:
-            await self._client.aclose()
+            try:
+                await self._client.aclose()
+            except Exception:
+                pass
+            self._client = None
+
 
     @property
     def has_credentials(self) -> bool:
@@ -149,4 +162,56 @@ class EchoClient:
         res = await self._request("POST", f"/backoffice/starlink/service-lines/{service_line_number}/{action}", json={})
         return res or {"message": f"Opt-in set to {enabled}"}
 
+    async def get_router_config(self, config_id: str, device_id: Optional[str] = None, service_line_number: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetch router configuration JSON: GET /backoffice/starlink/routers/configs/{configId}"""
+        params = {}
+        if device_id:
+            params["deviceId"] = device_id
+        if service_line_number:
+            params["serviceLineNumber"] = service_line_number
+        return await self._request("GET", f"/backoffice/starlink/routers/configs/{config_id}", params=params)
+
+    async def update_router_config(
+        self,
+        config_id: str,
+        router_config_json: str,
+        nickname: Optional[str] = None,
+        device_id: Optional[str] = None,
+        service_line_number: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Update existing router configuration: PUT /backoffice/starlink/routers/configs/{configId}"""
+        params = {}
+        if device_id:
+            params["deviceId"] = device_id
+        if service_line_number:
+            params["serviceLineNumber"] = service_line_number
+        payload = {"nickname": nickname or "ECHO - Router", "routerConfigJson": router_config_json}
+        return await self._request("PUT", f"/backoffice/starlink/routers/configs/{config_id}", params=params, json=payload)
+
+    async def create_and_assign_router_config(
+        self,
+        router_id: str,
+        router_config_json: Any,
+        nickname: Optional[str] = None,
+        allow_reassign: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """Create new config and assign to router: POST /backoffice/starlink/routers/configs/create-and-assign"""
+        payload = {
+            "nickname": nickname or f"ECHO - Router {router_id[-6:]}",
+            "routerConfigJson": router_config_json,
+            "routerIds": [router_id],
+            "allowReassign": allow_reassign
+        }
+        return await self._request("POST", "/backoffice/starlink/routers/configs/create-and-assign", json=payload)
+
+    async def get_router_info(self, router_id: str, device_id: Optional[str] = None, service_line_number: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetch router info: GET /backoffice/starlink/routers/{routerId}"""
+        params = {}
+        if device_id:
+            params["deviceId"] = device_id
+        if service_line_number:
+            params["serviceLineNumber"] = service_line_number
+        return await self._request("GET", f"/backoffice/starlink/routers/{router_id}", params=params)
+
 echo_client = EchoClient()
+

@@ -123,13 +123,16 @@ class SyncService:
                         terminal.router_id = telemetry.get("ri_routerId")
                         terminal.wifi_bypassed = bool(telemetry.get("r_WifiIsBypassed"))
                         
-                        # Throughput in Mbps (ut_DownlinkThroughput is in bps)
-                        dl_bps = float(telemetry.get("ut_DownlinkThroughput") or 0.0)
-                        ul_bps = float(telemetry.get("ut_UplinkThroughput") or 0.0)
-                        if dl_bps > 0:
-                            terminal.downlink_mbps = round(dl_bps / 1_000_000.0, 2)
-                        if ul_bps > 0:
-                            terminal.uplink_mbps = round(ul_bps / 1_000_000.0, 2)
+                        # Real-time Throughput (MB/s) - ECHO provides direct MB/s
+                        dl_val = float(telemetry.get("ut_DownlinkThroughput") or 0.0)
+                        ul_val = float(telemetry.get("ut_UplinkThroughput") or 0.0)
+                        # Fallback to list downlink if telemetry throughput is 0
+                        if dl_val <= 0 and float(d.get("downlink") or 0.0) > 0:
+                            dl_val = float(d.get("downlink") or 0.0)
+                        
+                        # In case upstream ever returns raw bits/s (> 100,000)
+                        terminal.downlink_mbps = round(dl_val / 1_000_000.0, 2) if dl_val > 100_000 else round(dl_val, 2)
+                        terminal.uplink_mbps = round(ul_val / 1_000_000.0, 2) if ul_val > 100_000 else round(ul_val, 2)
                 except Exception as ex:
                     logger.warning(f"Error fetching telemetry for {clean_id}: {ex}")
 

@@ -5,6 +5,8 @@ import FleetChart from './components/FleetChart.jsx';
 import TerminalTable from './components/TerminalTable.jsx';
 import TerminalDetailModal from './components/TerminalDetailModal.jsx';
 import ActionConfirmModal from './components/ActionConfirmModal.jsx';
+import WifiSettingsModal from './components/WifiSettingsModal.jsx';
+import BypassModeModal from './components/BypassModeModal.jsx';
 import AlertConfigModal from './components/AlertConfigModal.jsx';
 import AlertConfigView from './components/AlertConfigView.jsx';
 import Toast from './components/Toast.jsx';
@@ -31,6 +33,8 @@ export default function App() {
     type: 'reboot',
     target: null,
   });
+  const [wifiModal, setWifiModal] = useState({ isOpen: false, target: null });
+  const [bypassModal, setBypassModal] = useState({ isOpen: false, target: null });
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -85,6 +89,20 @@ export default function App() {
     setActionModal({
       isOpen: true,
       type: 'opt-in',
+      target: terminal,
+    });
+  };
+
+  const handleOpenWifiSettings = (terminal) => {
+    setWifiModal({
+      isOpen: true,
+      target: terminal,
+    });
+  };
+
+  const handleOpenBypassMode = (terminal) => {
+    setBypassModal({
+      isOpen: true,
       target: terminal,
     });
   };
@@ -245,6 +263,8 @@ export default function App() {
                     onSelectTerminal={id => setSelectedTerminalId(id)}
                     onRequestReboot={handleOpenReboot}
                     onRequestOptIn={handleOpenOptIn}
+                    onRequestWifiSettings={handleOpenWifiSettings}
+                    onRequestBypassMode={handleOpenBypassMode}
                     onToggleAlerts={handleToggleAlerts}
                     onCopyNotice={(msg) => showToast(msg, 'info')}
                     onOpenAlerts={() => setActiveView('alerts')}
@@ -287,9 +307,33 @@ export default function App() {
           onClose={() => setSelectedTerminalId(null)}
           onRequestReboot={handleOpenReboot}
           onRequestOptIn={handleOpenOptIn}
+          onRequestWifiSettings={handleOpenWifiSettings}
+          onRequestBypassMode={handleOpenBypassMode}
           onToggleAlerts={handleToggleAlerts}
         />
       )}
+
+      {/* WiFi Settings Modal */}
+      <WifiSettingsModal
+        isOpen={wifiModal.isOpen}
+        terminal={wifiModal.target}
+        onClose={() => setWifiModal(prev => ({ ...prev, isOpen: false }))}
+        onSuccess={(msg) => {
+          fetchOverview();
+          showToast(msg || 'Configuración Wi-Fi guardada', 'success');
+        }}
+      />
+
+      {/* Bypass Mode Modal */}
+      <BypassModeModal
+        isOpen={bypassModal.isOpen}
+        terminal={bypassModal.target}
+        onClose={() => setBypassModal(prev => ({ ...prev, isOpen: false }))}
+        onSuccess={(msg) => {
+          fetchOverview();
+          showToast(msg || 'Modo Bypass actualizado', 'success');
+        }}
+      />
 
       {/* Action Confirmation Modal */}
       <ActionConfirmModal

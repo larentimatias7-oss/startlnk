@@ -15,7 +15,9 @@ import {
   TrendingUp,
   AlertTriangle,
   Bell,
-  BellOff
+  BellOff,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 export default function TerminalTable({
@@ -23,6 +25,8 @@ export default function TerminalTable({
   onSelectTerminal,
   onRequestReboot,
   onRequestOptIn,
+  onRequestWifiSettings,
+  onRequestBypassMode,
   onCopyNotice,
   onOpenAlerts,
   onToggleAlerts
@@ -86,26 +90,13 @@ export default function TerminalTable({
         valB = (b.nickname || b.device_id || '').toLowerCase();
         return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
       }
+      if (sortField === 'is_online') { valA = a.is_online ? 1 : 0; valB = b.is_online ? 1 : 0; }
+      else if (sortField === 'throughput') { valA = a.downlink_mbps || 0; valB = b.downlink_mbps || 0; }
+      else if (sortField === 'quota_consumed_gb') { valA = a.quota_consumed_gb || 0; valB = b.quota_consumed_gb || 0; }
+      else if (sortField === 'quota_consumed_percent') { valA = a.quota_consumed_percent || 0; valB = b.quota_consumed_percent || 0; }
+      else if (sortField === 'ping_ms') { valA = a.is_online ? (a.ping_ms || 999) : 9999; valB = b.is_online ? (b.ping_ms || 999) : 9999; }
+      else if (sortField === 'days_remaining') { valA = a.days_remaining ?? 999; valB = b.days_remaining ?? 999; }
 
-      if (sortField === 'is_online') {
-        valA = a.is_online ? 1 : 0;
-        valB = b.is_online ? 1 : 0;
-      } else if (sortField === 'throughput') {
-        valA = a.downlink_mbps || 0;
-        valB = b.downlink_mbps || 0;
-      } else if (sortField === 'quota_consumed_gb') {
-        valA = a.quota_consumed_gb || 0;
-        valB = b.quota_consumed_gb || 0;
-      } else if (sortField === 'quota_consumed_percent') {
-        valA = a.quota_consumed_percent || 0;
-        valB = b.quota_consumed_percent || 0;
-      } else if (sortField === 'ping_ms') {
-        valA = a.is_online ? (a.ping_ms || 999) : 9999;
-        valB = b.is_online ? (b.ping_ms || 999) : 9999;
-      } else if (sortField === 'days_remaining') {
-        valA = a.days_remaining != null ? a.days_remaining : 999;
-        valB = b.days_remaining != null ? b.days_remaining : 999;
-      }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
@@ -155,39 +146,30 @@ export default function TerminalTable({
               }}
               className="bg-transparent text-xs text-[#CBD5E1] font-semibold focus:outline-none cursor-pointer"
             >
-              <option value="quota_consumed_gb-desc" className="bg-[#1A222B] text-white">Mayor Consumo (GB ↓)</option>
-              <option value="quota_consumed_gb-asc" className="bg-[#1A222B] text-white">Menor Consumo (GB ↑)</option>
-              <option value="quota_consumed_percent-desc" className="bg-[#1A222B] text-white">Mayor % Cuota (↓)</option>
-              <option value="throughput-desc" className="bg-[#1A222B] text-white">Mayor Velocidad (↓)</option>
-              <option value="ping_ms-asc" className="bg-[#1A222B] text-white">Menor Latencia (Ping ↑)</option>
-              <option value="nickname-asc" className="bg-[#1A222B] text-white">Nombre (A → Z)</option>
+              <option value="quota_consumed_gb-desc">Mayor Consumo (GB ↓)</option>
+              <option value="quota_consumed_gb-asc">Menor Consumo (GB ↑)</option>
+              <option value="quota_consumed_percent-desc">Mayor % Cuota (↓)</option>
+              <option value="throughput-desc">Mayor Velocidad (↓)</option>
+              <option value="ping_ms-asc">Menor Latencia (Ping ↑)</option>
+              <option value="nickname-asc">Nombre (A → Z)</option>
             </select>
           </div>
 
           {/* Filter Pills */}
           <div className="flex items-center gap-1 overflow-x-auto">
-            {[
-              { id: 'all', label: 'Todos' },
-              { id: 'online', label: 'Online' },
-              { id: 'offline', label: 'Offline' },
-              { id: 'alerts', label: 'Alertas Cuota' },
-              { id: 'burn_rate', label: '⚡ Ritmo Acelerado' },
-            ].map(filter => {
-              const isActive = statusFilter === filter.id;
-              return (
-                <button
-                  key={filter.id}
-                  onClick={() => setStatusFilter(filter.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
-                    isActive
-                      ? 'bg-[#F39200] text-slate-950 font-bold shadow-sm'
-                      : 'bg-[#141B22] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] border border-[#2D3742]'
-                  }`}
-                >
-                  {filter.label}
-                </button>
-              );
-            })}
+            {[{ id: 'all', label: 'Todos' }, { id: 'online', label: 'Online' }, { id: 'offline', label: 'Offline' }, { id: 'alerts', label: 'Alertas Cuota' }, { id: 'burn_rate', label: '⚡ Ritmo Acelerado' }].map(filter => (
+              <button
+                key={filter.id}
+                onClick={() => setStatusFilter(filter.id)}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
+                  statusFilter === filter.id
+                    ? 'bg-[#F39200] text-slate-950 font-bold shadow-sm'
+                    : 'bg-[#141B22] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] border border-[#2D3742]'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
 
           {/* Quick Alert Config Button */}
@@ -332,9 +314,9 @@ export default function TerminalTable({
                     <td className="py-2.5 px-4">
                       {t.is_online ? (
                         <div className="font-mono text-[11px]">
-                          <span className="text-[#3182CE] font-bold">↓ {t.downlink_mbps}</span>
+                          <span className="text-[#00A389] font-bold">↓ {Number(t.downlink_mbps || 0).toFixed(2)}</span>
                           <span className="text-[#64748B] mx-1">/</span>
-                          <span className="text-[#CBD5E1]">↑ {t.uplink_mbps} Mbps</span>
+                          <span className="text-[#CBD5E1]">↑ {Number(t.uplink_mbps || 0).toFixed(2)} MB/s</span>
                           <span className="block text-[10px] text-[#94A3B8]">Ping: {t.ping_ms} ms</span>
                         </div>
                       ) : (
@@ -402,6 +384,27 @@ export default function TerminalTable({
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
+
+                        {onRequestWifiSettings && (
+                          <button
+                            onClick={() => onRequestWifiSettings(t)}
+                            className="p-1.5 rounded-md bg-[#141B22] hover:bg-[rgba(243,146,0,0.16)] text-[#CBD5E1] hover:text-[#F39200] border border-[#2D3742] hover:border-[#F39200]/40 transition-colors"
+                            title="Editar Wi-Fi (SSID / Password)"
+                          >
+                            <Wifi className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {onRequestBypassMode && (
+                          <button
+                            onClick={() => onRequestBypassMode(t)}
+                            className="p-1.5 rounded-md bg-[#141B22] hover:bg-[rgba(221,107,32,0.16)] text-[#CBD5E1] hover:text-[#DD6B20] border border-[#2D3742] hover:border-[#DD6B20]/40 transition-colors"
+                            title={t.wifi_bypassed ? 'Modo Bypass activo (Clic para desactivar)' : 'Habilitar modo Bypass'}
+                          >
+                            <WifiOff className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         <button
                           onClick={() => onRequestReboot(t)}
                           className="p-1.5 rounded-md bg-[#141B22] hover:bg-[rgba(229,62,62,0.16)] text-[#CBD5E1] hover:text-[#E53E3E] border border-[#2D3742] hover:border-[#E53E3E]/40 transition-colors"
@@ -417,7 +420,6 @@ export default function TerminalTable({
                           <Sliders className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* 4. Activar / Desactivar Alertas para esta Antena */}
                         {onToggleAlerts && (
                           <button
                             onClick={() => onToggleAlerts(t)}
@@ -426,17 +428,9 @@ export default function TerminalTable({
                                 ? 'bg-[#141B22] hover:bg-[rgba(56,161,105,0.16)] text-[#38A169] border-[#2D3742] hover:border-[#38A169]/40'
                                 : 'bg-[rgba(229,62,62,0.14)] hover:bg-[rgba(229,62,62,0.25)] text-[#E53E3E] border-[#E53E3E]/40'
                             }`}
-                            title={
-                              t.alerts_enabled !== false
-                                ? 'Alertas de Telegram activas para este enlace (Clic para desactivar/silenciar)'
-                                : 'Alertas de Telegram desactivadas/silenciadas (Clic para activar)'
-                            }
+                            title={t.alerts_enabled !== false ? 'Alertas activas (Clic para silenciar)' : 'Alertas silenciadas (Clic para activar)'}
                           >
-                            {t.alerts_enabled !== false ? (
-                              <Bell className="w-3.5 h-3.5" />
-                            ) : (
-                              <BellOff className="w-3.5 h-3.5" />
-                            )}
+                            {t.alerts_enabled !== false ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
                           </button>
                         )}
                       </div>

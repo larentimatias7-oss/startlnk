@@ -13,7 +13,9 @@ import {
   Globe,
   CheckCircle2,
   Bell,
-  BellOff
+  BellOff,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -25,12 +27,15 @@ import {
   Legend,
   CartesianGrid
 } from 'recharts';
+import ConnectivityHealthWidget from './ConnectivityHealthWidget.jsx';
 
 export default function TerminalDetailModal({
   deviceId,
   onClose,
   onRequestReboot,
   onRequestOptIn,
+  onRequestWifiSettings,
+  onRequestBypassMode,
   onToggleAlerts
 }) {
   const [activeTab, setActiveTab] = useState('telemetry'); // telemetry, billing, actions
@@ -114,39 +119,26 @@ export default function TerminalDetailModal({
 
         {/* Tab Navigation */}
         <div className="px-5 bg-[#141B22] border-b border-[#2D3742] flex gap-6 text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('telemetry')}
-            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
-              activeTab === 'telemetry'
-                ? 'border-[#F39200] text-[#F39200] font-bold'
-                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Telemetría RF & Hardware</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('billing')}
-            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
-              activeTab === 'billing'
-                ? 'border-[#F39200] text-[#F39200] font-bold'
-                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            <span>Consumo & Ciclo Activo</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('actions')}
-            className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
-              activeTab === 'actions'
-                ? 'border-[#F39200] text-[#F39200] font-bold'
-                : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Control Remoto</span>
-          </button>
+          {[
+            { id: 'telemetry', label: 'Telemetría RF & Hardware', icon: Activity },
+            { id: 'billing', label: 'Consumo & Ciclo Activo', icon: BarChart3 },
+            { id: 'actions', label: 'Control Remoto', icon: Shield },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`py-2.5 flex items-center gap-1.5 border-b-2 transition-colors ${
+                  isActive ? 'border-[#F39200] text-[#F39200] font-bold' : 'border-transparent text-[#94A3B8] hover:text-[#CBD5E1]'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Modal Body with Divulgación Progresiva */}
@@ -165,33 +157,32 @@ export default function TerminalDetailModal({
               {/* TAB 1: TELEMETRÍA RF Y HARDWARE */}
               {activeTab === 'telemetry' && (
                 <div className="space-y-4">
-                  {/* RF Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Connectivity & Health (ECHO Live Telemetry Widget) */}
+                  <ConnectivityHealthWidget
+                    terminal={detail}
+                    onOpenReboot={onRequestReboot}
+                    onOpenWifiSettings={onRequestWifiSettings}
+                    onOpenBypassMode={onRequestBypassMode}
+                  />
+
+                  {/* Secondary RF Metrics Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
                       <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Latencia Ping</span>
-                      <span className="text-xl font-mono font-black text-[#F1F5F9]">
-                        {detail.ping_ms} <span className="text-xs text-[#94A3B8] font-sans">ms</span>
-                      </span>
+                      <span className="text-lg font-mono font-black text-[#F1F5F9]">{detail.ping_ms} ms</span>
                     </div>
-
                     <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
-                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Downlink / Uplink</span>
-                      <span className="text-lg font-mono font-bold text-[#3182CE]">
-                        {detail.downlink_mbps} <span className="text-xs text-[#94A3B8] font-sans">/</span> {detail.uplink_mbps} <span className="text-xs text-[#94A3B8] font-sans">Mbps</span>
-                      </span>
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Calidad Señal</span>
+                      <span className="text-lg font-mono font-black text-[#38A169]">{detail.signal_quality}%</span>
                     </div>
-
-                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
-                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Calidad de Señal</span>
-                      <span className="text-xl font-mono font-black text-[#38A169]">
-                        {detail.signal_quality}%
-                      </span>
-                    </div>
-
                     <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
                       <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Obstrucción RF</span>
-                      <span className="text-xl font-mono font-black text-[#CBD5E1]">
-                        {detail.obstruction_percent}%
+                      <span className="text-lg font-mono font-black text-[#CBD5E1]">{detail.obstruction_percent}%</span>
+                    </div>
+                    <div className="p-3 rounded-md bg-[#141B22] border border-[#2D3742]">
+                      <span className="text-[11px] font-semibold text-[#94A3B8] block mb-1">Modo Wi-Fi</span>
+                      <span className={`text-xs font-mono font-bold ${detail.wifi_bypassed ? 'text-[#DD6B20]' : 'text-[#38A169]'}`}>
+                        {detail.wifi_bypassed ? 'Bypass (Puente)' : 'Wi-Fi Activo'}
                       </span>
                     </div>
                   </div>
@@ -202,32 +193,19 @@ export default function TerminalDetailModal({
                       Especificaciones de Hardware y Red
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">Modelo de Antena:</span>
-                        <span className="text-[#F1F5F9] font-medium">{detail.dish_model || 'Flat High Performance'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">Serial Antena / Dish:</span>
-                        <span className="text-[#F1F5F9] font-mono">{detail.dish_serial || detail.kit_serial || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">Serial del Kit:</span>
-                        <span className="text-[#F1F5F9] font-mono">{detail.kit_serial || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">Router ID:</span>
-                        <span className="text-[#F1F5F9] font-mono">{detail.router_id || 'Integrado'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">IP Pública Enrutable:</span>
-                        <span className={`font-semibold ${detail.has_public_ip ? 'text-[#3182CE]' : 'text-[#94A3B8]'}`}>
-                          {detail.has_public_ip ? 'Habilitada' : 'CGNAT Privada'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[#94A3B8] block text-[11px]">Tiempo Operativo (Uptime):</span>
-                        <span className="text-[#F1F5F9] font-mono">{formatUptime(detail.uptime_seconds)}</span>
-                      </div>
+                      {[
+                        { label: 'Modelo de Antena:', val: detail.dish_model || 'Flat High Performance' },
+                        { label: 'Serial Antena / Dish:', val: detail.dish_serial || detail.kit_serial || 'N/A', mono: true },
+                        { label: 'Serial del Kit:', val: detail.kit_serial || 'N/A', mono: true },
+                        { label: 'Router ID:', val: detail.router_id || 'Integrado', mono: true },
+                        { label: 'IP Pública:', val: detail.has_public_ip ? 'Habilitada' : 'CGNAT Privada', color: detail.has_public_ip ? 'text-[#3182CE]' : 'text-[#94A3B8]' },
+                        { label: 'Uptime:', val: formatUptime(detail.uptime_seconds), mono: true },
+                      ].map((item, i) => (
+                        <div key={i}>
+                          <span className="text-[#94A3B8] block text-[11px]">{item.label}</span>
+                          <span className={`text-[#F1F5F9] font-medium ${item.mono ? 'font-mono' : ''} ${item.color || ''}`}>{item.val}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -349,17 +327,15 @@ export default function TerminalDetailModal({
                       Todas las acciones críticas requieren diálogo de doble confirmación interactivo antes de ejecutarse.
                     </p>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Reboot Action Card */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {/* Reboot Card */}
                       <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
                         <div>
-                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
+                          <div className="flex items-center gap-2 mb-1 text-xs font-bold text-[#F1F5F9]">
                             <RotateCw className="w-4 h-4 text-[#E53E3E]" />
-                            <span>Reinicio Remoto de Antena</span>
+                            <span>Reinicio de Antena</span>
                           </div>
-                          <p className="text-[11px] text-[#94A3B8] mb-3">
-                            Fuerza un reboot del hardware satelital. Provoca corte temporal de servicio de 2 a 5 minutos.
-                          </p>
+                          <p className="text-[11px] text-[#94A3B8] mb-3">Reboot del hardware. Corte temporal de servicio de 2 a 5 min.</p>
                         </div>
                         <button
                           onClick={() => onRequestReboot(detail)}
@@ -370,20 +346,62 @@ export default function TerminalDetailModal({
                         </button>
                       </div>
 
+                      {/* WiFi Config Card */}
+                      {onRequestWifiSettings && (
+                        <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1 text-xs font-bold text-[#F1F5F9]">
+                              <Wifi className="w-4 h-4 text-[#F39200]" />
+                              <span>Configuración Wi-Fi</span>
+                            </div>
+                            <p className="text-[11px] text-[#94A3B8] mb-3">Modifica SSID y contraseña WPA2 del router Starlink.</p>
+                          </div>
+                          <button
+                            onClick={() => onRequestWifiSettings(detail)}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(243,146,0,0.16)] hover:bg-[#F39200] text-[#F39200] hover:text-slate-950 border border-[rgba(243,146,0,0.3)] text-xs font-bold transition-colors"
+                          >
+                            <Wifi className="w-3.5 h-3.5" />
+                            <span>Editar Wi-Fi</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Bypass Mode Card */}
+                      {onRequestBypassMode && (
+                        <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1 text-xs font-bold text-[#F1F5F9]">
+                              <WifiOff className="w-4 h-4 text-[#DD6B20]" />
+                              <span>Modo Bypass (Puente)</span>
+                            </div>
+                            <p className="text-[11px] text-[#94A3B8] mb-3">Desactiva el Wi-Fi para enrutar con firewall de terceros.</p>
+                          </div>
+                          <button
+                            onClick={() => onRequestBypassMode(detail)}
+                            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${
+                              detail.wifi_bypassed
+                                ? 'bg-[rgba(56,161,105,0.16)] hover:bg-[#38A169] text-[#38A169] hover:text-white border-[#38A169]/30'
+                                : 'bg-[rgba(221,107,32,0.16)] hover:bg-[#DD6B20] text-[#DD6B20] hover:text-white border-[#DD6B20]/30'
+                            }`}
+                          >
+                            <WifiOff className="w-3.5 h-3.5" />
+                            <span>{detail.wifi_bypassed ? 'Desactivar Bypass' : 'Activar Bypass'}</span>
+                          </button>
+                        </div>
+                      )}
+
                       {/* Opt-In Action Card */}
                       <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
                         <div>
-                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
-                            <Sliders className="w-4 h-4 text-[#F39200]" />
-                            <span>Política Data Opt-In (Overage)</span>
+                          <div className="flex items-center gap-2 mb-1 text-xs font-bold text-[#F1F5F9]">
+                            <Sliders className="w-4 h-4 text-[#3182CE]" />
+                            <span>Data Opt-In (Overage)</span>
                           </div>
-                          <p className="text-[11px] text-[#94A3B8] mb-3">
-                            Habilita o deshabilita la compra de datos prioritarios automáticos al superar la cuota del contrato.
-                          </p>
+                          <p className="text-[11px] text-[#94A3B8] mb-3">Compra automática de datos prioritarios al agotar la cuota.</p>
                         </div>
                         <button
                           onClick={() => onRequestOptIn(detail)}
-                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(243,146,0,0.16)] hover:bg-[#F39200] text-[#F39200] hover:text-slate-950 border border-[rgba(243,146,0,0.3)] text-xs font-bold transition-colors"
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-[rgba(49,130,206,0.16)] hover:bg-[#3182CE] text-[#3182CE] hover:text-white border border-[#3182CE]/30 text-xs font-bold transition-colors"
                         >
                           <Sliders className="w-3.5 h-3.5" />
                           <span>Configurar Opt-In</span>
@@ -393,18 +411,12 @@ export default function TerminalDetailModal({
                       {/* Alert Notification Toggle Card */}
                       <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
                         <div>
-                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
-                            {detail.alerts_enabled !== false ? (
-                              <Bell className="w-4 h-4 text-[#38A169]" />
-                            ) : (
-                              <BellOff className="w-4 h-4 text-[#E53E3E]" />
-                            )}
+                          <div className="flex items-center gap-2 mb-1 text-xs font-bold text-[#F1F5F9]">
+                            {detail.alerts_enabled !== false ? <Bell className="w-4 h-4 text-[#38A169]" /> : <BellOff className="w-4 h-4 text-[#E53E3E]" />}
                             <span>Supervisión de Alertas</span>
                           </div>
                           <p className="text-[11px] text-[#94A3B8] mb-3">
-                            {detail.alerts_enabled !== false
-                              ? 'Las alertas automáticas hacia Telegram están activas para este enlace.'
-                              : 'Las alertas hacia Telegram para este enlace están silenciadas.'}
+                            {detail.alerts_enabled !== false ? 'Alertas Telegram activas para este enlace.' : 'Alertas Telegram silenciadas.'}
                           </p>
                         </div>
                         {onToggleAlerts && (
@@ -419,17 +431,7 @@ export default function TerminalDetailModal({
                                 : 'bg-[rgba(56,161,105,0.16)] hover:bg-[#38A169] text-[#38A169] hover:text-white border-[#38A169]/30'
                             }`}
                           >
-                            {detail.alerts_enabled !== false ? (
-                              <>
-                                <BellOff className="w-3.5 h-3.5" />
-                                <span>Silenciar Alertas</span>
-                              </>
-                            ) : (
-                              <>
-                                <Bell className="w-3.5 h-3.5" />
-                                <span>Activar Alertas</span>
-                              </>
-                            )}
+                            {detail.alerts_enabled !== false ? <><BellOff className="w-3.5 h-3.5" /><span>Silenciar</span></> : <><Bell className="w-3.5 h-3.5" /><span>Activar</span></>}
                           </button>
                         )}
                       </div>
