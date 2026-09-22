@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     SYNC_INTERVAL_MINUTES: int = 15
     ENABLE_SCHEDULER: bool = True
 
+    # Telegram Default Configuration (persists across fresh deploys)
+    TELEGRAM_BOT_TOKEN: str = "8899338410:AAHP9RZZp6Ej8zQrwItyYTlbpdUiidjnQwM"
+    TELEGRAM_BOT_NAME: str = "Alertas Infra MILICIC"
+    TELEGRAM_BOT_USERNAME: str = "inframilicic_bot"
+    TELEGRAM_DEFAULT_CHAT_ID: str = "-1003912373499"
+
     # CORS
     CORS_ORIGINS: List[str] = ["*"]
 

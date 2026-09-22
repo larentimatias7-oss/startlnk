@@ -21,6 +21,7 @@ from backend.app.schemas.alert import (
 from backend.app.services.alert_service import alert_service
 from backend.app.services.telegram_service import telegram_service
 from backend.app.services.scheduler import reschedule_sync_job
+from backend.app.services.telegram_persistence import backup_telegram_config
 
 router = APIRouter(prefix="/alerts", tags=["Alerts & Notifications"])
 
@@ -137,6 +138,7 @@ async def create_telegram_bot(bot_data: TelegramBotCreate, db: Session = Depends
         cfg.telegram_bot_token = clean_token
 
     db.commit()
+    backup_telegram_config(db)
     db.refresh(bot)
 
     return TelegramBotSchema(
@@ -180,6 +182,7 @@ async def update_telegram_bot(bot_id: int, update_data: TelegramBotUpdate, db: S
         cfg.telegram_bot_token = bot.token
 
     db.commit()
+    backup_telegram_config(db)
     db.refresh(bot)
     ch_count = db.query(TelegramChannel).filter(TelegramChannel.bot_id == bot.id).count()
 
@@ -214,6 +217,7 @@ def delete_telegram_bot(bot_id: int, db: Session = Depends(get_db)):
         cfg.telegram_bot_token = next_bot.token
 
     db.commit()
+    backup_telegram_config(db)
     return {"success": True, "message": f"Bot '{bot.name}' eliminado"}
 
 # --- Telegram Channels Endpoints ---
@@ -252,6 +256,7 @@ def create_telegram_channel(channel_data: TelegramChannelCreate, db: Session = D
     )
     db.add(channel)
     db.commit()
+    backup_telegram_config(db)
     db.refresh(channel)
     return _enrich_channel_schema(channel, db)
 
@@ -266,6 +271,7 @@ def update_telegram_channel(channel_id: int, update_data: TelegramChannelUpdate,
         setattr(channel, field, value)
 
     db.commit()
+    backup_telegram_config(db)
     db.refresh(channel)
     return _enrich_channel_schema(channel, db)
 
@@ -278,6 +284,7 @@ def delete_telegram_channel(channel_id: int, db: Session = Depends(get_db)):
 
     db.delete(channel)
     db.commit()
+    backup_telegram_config(db)
     return {"success": True, "message": f"Canal '{channel.name}' eliminado"}
 
 @router.post("/channels/{channel_id}/test-real-alerts")

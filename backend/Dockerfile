@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application code
 COPY backend/app ./backend/app
 
+# Ensure persistent data directory exists
+RUN mkdir -p /app/data && chmod 777 /app/data
+
 # Expose port
 EXPOSE 8000
 

@@ -148,13 +148,20 @@ SYNC_INTERVAL_MINUTES=15
 DATABASE_URL=sqlite:////app/data/starlink_dashboard.db
 HOST=0.0.0.0
 PORT=8000
-# Opcional (fallback legacy si no se configuran bots en la UI):
-TELEGRAM_BOT_TOKEN=8899338410:AAHP...
+
+# Configuración Persistente de Telegram (resiste recreaciones de contenedor de cero):
+TELEGRAM_BOT_TOKEN=8899338410:AAHP9RZZp6Ej8zQrwItyYTlbpdUiidjnQwM
+TELEGRAM_BOT_NAME=Alertas Infra MILICIC
+TELEGRAM_BOT_USERNAME=inframilicic_bot
+TELEGRAM_DEFAULT_CHAT_ID=-1003912373499
 ```
 
 > [!TIP]
-> **Gestión Dinámica de Bots y Canales en Caliente**:
-> Los Tokens de Bot de Telegram y los Canales/Grupos destinatarios se administran directamente desde la interfaz web corporativa (pestaña **Telegram & Bots**), sin necesidad de editar variables de entorno ni reiniciar los contenedores. Cada bot registrado se valida automáticamente contra la API oficial de Telegram (`getMe`) y sus tokens se almacenan y exponen de forma enmascarada (`token_masked`) para máxima seguridad.
+> **Persistencia Indestructible de Bots y Canales (Estrategia de 3 Capas)**:
+> Para evitar que la configuración de Telegram se pierda cuando Dokploy reconstruye el contenedor o recrea los volúmenes, la plataforma implementa una estrategia de persistencia en 3 capas:
+> 1. **Archivo Semilla en Repositorio (`telegram_seed.json`)**: Contiene la configuración recuperada de los bots y canales de Milicic y se incluye en la imagen Docker. Al iniciar un contenedor con base de datos en blanco, se siembra automáticamente.
+> 2. **Espejado en Volumen Persistente (`/app/data/telegram_config.json`)**: Cada vez que se agrega, edita o elimina un bot o canal desde la UI web, se guarda de inmediato una copia en JSON en el volumen persistente de Dokploy.
+> 3. **Variables de Entorno Dokploy**: Si se configuran `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_NAME`, `TELEGRAM_BOT_USERNAME` y `TELEGRAM_DEFAULT_CHAT_ID` en la interfaz web de Dokploy, el sistema siempre tendrá las credenciales maestras inyectadas directamente en memoria.
 
 ### 2.4. Optimizaciones de Compilación (Code Splitting) y Migraciones Automáticas
 

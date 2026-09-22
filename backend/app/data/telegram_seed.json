@@ -1,0 +1,27 @@
+{
+  "bot": {
+    "name": "Alertas Infra MILICIC",
+    "token": "8899338410:AAHP9RZZp6Ej8zQrwItyYTlbpdUiidjnQwM",
+    "bot_username": "inframilicic_bot",
+    "bot_id": "8899338410",
+    "is_default": true,
+    "is_active": true
+  },
+  "channels": [
+    {
+      "name": "Telegram Milicic",
+      "chat_id": "-1003912373499",
+      "is_active": true
+    },
+    {
+      "name": "Alertas Infra MIO",
+      "chat_id": "-1004383937012",
+      "is_active": false
+    },
+    {
+      "name": "Zbx alertas MILICIC",
+      "chat_id": "-5468713329",
+      "is_active": false
+    }
+  ]
+}

@@ -40,35 +40,11 @@ def apply_migrations():
         except Exception:
             pass
 
-    # 4. Migrate existing single bot token to TelegramBot table if empty
+    # 4. Ensure persistent Telegram bot and channels are seeded
     try:
-        from backend.app.models.terminal import AlertConfig, TelegramBot, TelegramChannel
+        from backend.app.services.telegram_persistence import seed_telegram_defaults
         db = SessionLocal()
-        bots_count = db.query(TelegramBot).count()
-        if bots_count == 0:
-            cfg = db.query(AlertConfig).first()
-            if cfg and cfg.telegram_bot_token and cfg.telegram_bot_token.strip():
-                # Extract bot_id from token prefix (before ':')
-                token_val = cfg.telegram_bot_token.strip()
-                t_prefix = token_val.split(":")[0] if ":" in token_val else None
-                default_bot = TelegramBot(
-                    name="Alertas Infra MILICIC",
-                    token=token_val,
-                    bot_username="inframilicic_bot",
-                    bot_id=t_prefix,
-                    is_default=True,
-                    is_active=True
-                )
-                db.add(default_bot)
-                db.commit()
-                db.refresh(default_bot)
-
-                # Link existing channels to this default bot
-                db.query(TelegramChannel).filter(TelegramChannel.bot_id.is_(None)).update(
-                    {TelegramChannel.bot_id: default_bot.id},
-                    synchronize_session=False
-                )
-                db.commit()
+        seed_telegram_defaults(db)
         db.close()
     except Exception:
         pass
