@@ -11,9 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+        run: |
+          git config --global --add safe.directory "*"
+          if [ -d .git ]; then
+            git remote set-url origin http://172.27.210.154:3001/${{ github.repository }}.git
+          else
+            git init .
+            git remote add origin http://172.27.210.154:3001/${{ github.repository }}.git
+          fi
+          git fetch --depth 1 origin ${{ github.ref }}
+          git checkout --force FETCH_HEAD
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -37,9 +44,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
+        run: |
+          git config --global --add safe.directory "*"
+          if [ -d .git ]; then
+            git remote set-url origin http://172.27.210.154:3001/${{ github.repository }}.git
+          else
+            git init .
+            git remote add origin http://172.27.210.154:3001/${{ github.repository }}.git
+          fi
+          git fetch --depth 1 origin ${{ github.ref }}
+          git checkout --force FETCH_HEAD
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,3 +65,4 @@ jobs:
           cd frontend
           npm install
           npm run build
+
