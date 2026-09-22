@@ -62,7 +62,7 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
             <Icon className="w-4 h-4" />
           </div>
           <div className="text-xs">
-            <p className={`font-semibold ${styles.text} leading-snug`}>{message}</p>
+            <p className={`font-semibold ${currentStyle.text} leading-snug`}>{message}</p>
           </div>
         </div>
         <button
