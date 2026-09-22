@@ -272,6 +272,17 @@ def delete_telegram_channel(channel_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"success": True, "message": f"Canal '{channel.name}' eliminado"}
 
+@router.post("/channels/{channel_id}/test-real-alerts")
+async def test_channel_with_real_alerts(channel_id: int, db: Session = Depends(get_db)):
+    """
+    Evalúa la flota en vivo y envía todas las alertas reales y vigentes al momento
+    directamente al canal especificado, omitiendo la ventana de cooldown.
+    """
+    res = await alert_service.test_channel_with_real_alerts(db, channel_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=res.get("error"))
+    return res
+
 # --- Verification & Testing Endpoints ---
 
 @router.post("/verify-bot")

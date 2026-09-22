@@ -27,6 +27,7 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
   const [activeTab, setActiveTab] = useState('telegram'); // 'telegram', 'rules', 'history'
   const [loading, setLoading] = useState(false);
   const [testingId, setTestingId] = useState(null);
+  const [testingRealId, setTestingRealId] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
@@ -270,6 +271,35 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
       if (onNotify) onNotify('Error al enviar prueba a Telegram', 'error');
     } finally {
       setTestingId(null);
+    }
+  };
+
+  const handleTestChannelRealAlerts = async (channel) => {
+    setTestingRealId(channel.id);
+    try {
+      const res = await fetch(`/api/alerts/channels/${channel.id}/test-real-alerts`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const count = data.alerts_count ?? 0;
+        const sent = data.alerts_sent ?? 0;
+        const sender = data.bot_username ? `@${data.bot_username}` : 'Bot';
+        if (count === 0) {
+          if (onNotify) onNotify(`✅ Reporte de flota saludable enviado a '${channel.name}' (0 alertas vigentes)`, 'success');
+        } else {
+          if (onNotify) onNotify(`⚡ Se enviaron ${sent} de ${count} alertas reales vigentes a '${channel.name}' vía ${sender}`, 'success');
+        }
+        // Refresh alert history if available
+        const resHist = await fetch('/api/alerts/history').then(r => r.json());
+        if (Array.isArray(resHist)) setHistory(resHist);
+      } else {
+        if (onNotify) onNotify(`Error al probar alertas reales: ${data.detail || data.error || 'Fallo de envío'}`, 'error');
+      }
+    } catch (e) {
+      if (onNotify) onNotify('Error al conectar con la API para prueba con alertas reales', 'error');
+    } finally {
+      setTestingRealId(null);
     }
   };
 
@@ -602,17 +632,28 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                         </div>
                       </div>
 
-                      {/* Channel Controls: Test, Pause/Resume, Delete */}
-                      <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+                      {/* Channel Controls: Test, Test Real Alerts, Pause/Resume, Delete */}
+                      <div className="flex items-center gap-2 self-end md:self-auto shrink-0 flex-wrap">
                         <button
                           type="button"
                           onClick={() => handleTestChannel(ch)}
-                          disabled={testingId === ch.id}
+                          disabled={testingId === ch.id || testingRealId === ch.id}
                           className="px-3 py-1.5 rounded-md bg-[#222C38] hover:bg-[#2D3742] text-[#CBD5E1] hover:text-white border border-[#2D3742] text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                          title="Enviar mensaje de prueba a este canal ahora"
+                          title="Enviar mensaje de prueba de conectividad a este canal"
                         >
                           <Send className={`w-3.5 h-3.5 ${testingId === ch.id ? 'animate-bounce text-[#F39200]' : 'text-[#F39200]'}`} />
                           <span>{testingId === ch.id ? 'Enviando...' : 'Probar Canal'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleTestChannelRealAlerts(ch)}
+                          disabled={testingRealId === ch.id || testingId === ch.id}
+                          className="px-3 py-1.5 rounded-md bg-[rgba(243,146,0,0.12)] hover:bg-[rgba(243,146,0,0.22)] text-[#F39200] hover:text-white border border-[#F39200]/40 hover:border-[#F39200] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+                          title="Evalúa la flota en vivo y envía las alertas reales vigentes a este canal"
+                        >
+                          <Zap className={`w-3.5 h-3.5 ${testingRealId === ch.id ? 'animate-spin text-[#F39200]' : 'text-[#F39200]'}`} />
+                          <span>{testingRealId === ch.id ? 'Despachando...' : 'Alertas Reales'}</span>
                         </button>
 
                         <button

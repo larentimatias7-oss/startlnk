@@ -278,6 +278,143 @@ class AlertService:
             delivered_channels_count=sent_count,
             status="SENT" if sent_count > 0 else "FAILED"
         )
-        db.add(event)
+    async def test_channel_with_real_alerts(self, db: Session, channel_id: int) -> Dict[str, Any]:
+        """
+        Tests a specific Telegram channel by evaluating live fleet data and dispatching
+        all currently active real alerts, bypassing cooldown.
+        """
+        from backend.app.models.terminal import TelegramBot, TelegramChannel, Terminal, BillingCycle
+
+        channel = db.query(TelegramChannel).filter(TelegramChannel.id == channel_id).first()
+        if not channel:
+            return {"success": False, "error": f"Canal con ID {channel_id} no encontrado"}
+
+        config = self.get_or_create_config(db)
+
+        # Determine which bot to use for this channel
+        bot = db.query(TelegramBot).filter(TelegramBot.id == channel.bot_id).first() if channel.bot_id else None
+        if not bot or not bot.is_active:
+            bot = db.query(TelegramBot).filter(TelegramBot.is_default == True, TelegramBot.is_active == True).first()
+        if not bot:
+            bot = db.query(TelegramBot).filter(TelegramBot.is_active == True).first()
+
+        token = bot.token if bot else config.telegram_bot_token
+        if not token:
+            return {"success": False, "error": "No hay un Bot de Telegram configurado o activo para este canal"}
+
+        terminals = db.query(Terminal).all()
+        active_alerts = []
+
+        for t in terminals:
+            if hasattr(t, "alerts_enabled") and t.alerts_enabled is False:
+                continue
+
+            cycle = (
+                db.query(BillingCycle)
+                .filter(BillingCycle.service_line_number == t.service_line_number, BillingCycle.is_active == True)
+                .order_by(desc(BillingCycle.id))
+                .first()
+            )
+            consumed_gb = cycle.consumed_amount_gb if cycle else 0.0
+            total_gb = cycle.total_amount_gb if cycle and cycle.total_amount_gb > 0 else 1000.0
+            percent = (consumed_gb / total_gb * 100.0) if total_gb > 0 else 0.0
+
+            burn_metrics = self.calculate_burn_rate(
+                consumed_gb, total_gb,
+                cycle.start_date if cycle else None,
+                cycle.end_date if cycle else None
+            )
+            days_remaining = burn_metrics["days_remaining"]
+            daily_rate = burn_metrics["daily_rate"]
+            projected_days = burn_metrics["projected_exhaustion_days"]
+
+            nickname = t.nickname or t.device_id
+            sl = t.service_line_number or "N/A"
+            account = t.account_name or "Milicic S.A."
+
+            # 1. Quota alerts
+            if percent >= config.quota_critical_percent:
+                msg = telegram_service.format_quota_alert(
+                    nickname=nickname, service_line_number=sl, account_name=account,
+                    consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
+                    days_remaining=days_remaining, downlink=t.downlink_mbps,
+                    uplink=t.uplink_mbps, ping=t.ping_ms, severity="CRITICAL"
+                )
+                active_alerts.append(("QUOTA_CRITICAL", "CRITICAL", msg, f"Cuota agotada: {consumed_gb:.1f}/{total_gb:.0f} GB ({percent:.1f}%)", t))
+            elif percent >= config.quota_threshold_percent:
+                msg = telegram_service.format_quota_alert(
+                    nickname=nickname, service_line_number=sl, account_name=account,
+                    consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
+                    days_remaining=days_remaining, downlink=t.downlink_mbps,
+                    uplink=t.uplink_mbps, ping=t.ping_ms, severity="WARNING"
+                )
+                active_alerts.append(("QUOTA_THRESHOLD", "WARNING", msg, f"Umbral superado: {consumed_gb:.1f}/{total_gb:.0f} GB ({percent:.1f}%)", t))
+
+            # 2. Burn-Rate alerts
+            if percent >= config.early_warning_percent and days_remaining >= config.early_warning_days_remaining:
+                msg = telegram_service.format_burn_rate_alert(
+                    nickname=nickname, service_line_number=sl, account_name=account,
+                    consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
+                    days_remaining=days_remaining, daily_burn_rate=daily_rate,
+                    projected_exhaustion_days=projected_days
+                )
+                active_alerts.append(("EARLY_BURN_RATE", "WARNING", msg, f"Ritmo acelerado: {percent:.1f}% con {days_remaining}d restantes", t))
+
+            # 3. Offline alerts
+            if config.alert_on_offline and not t.is_online:
+                msg = telegram_service.format_offline_alert(nickname, sl, account, t.ping_ms)
+                active_alerts.append(("TERMINAL_OFFLINE", "WARNING", msg, f"Enlace desconectado: {nickname}", t))
+
+        # Send alerts to this specific channel
+        sent_count = 0
+        bot_uname = bot.bot_username if bot else "bot"
+
+        if active_alerts:
+            # Send introductory banner
+            banner = (
+                f"🧪 <b>MILICIC FLEET MONITOR - PRUEBA CON DATOS REALES</b>\n"
+                f"Canal destino: <b>{channel.name}</b>\n"
+                f"Emisor: <b>@{bot_uname}</b>\n\n"
+                f"📋 Se detectaron <b>{len(active_alerts)} alertas vigentes</b> en la flota al momento del test.\n"
+                f"Despachando notificaciones reales a continuación:"
+            )
+            await telegram_service.send_message(token, channel.chat_id, banner)
+
+            for alert_type, severity, msg, summary, t in active_alerts:
+                res = await telegram_service.send_message(token, channel.chat_id, msg)
+                if res.get("success"):
+                    sent_count += 1
+                    self._record_event(
+                        db, t.id, t.nickname or t.device_id, t.service_line_number or "N/A",
+                        alert_type, severity, f"[Test Real '{channel.name}'] {summary}", 1
+                    )
+            db.commit()
+            return {
+                "success": True,
+                "alerts_count": len(active_alerts),
+                "sent_count": sent_count,
+                "channel_name": channel.name,
+                "bot_username": bot_uname,
+                "message": f"Se despacharon {sent_count} de {len(active_alerts)} alertas vigentes al canal '{channel.name}' vía @{bot_uname}"
+            }
+        else:
+            # Send healthy fleet status
+            healthy_msg = (
+                f"✅ <b>MILICIC FLEET MONITOR - PRUEBA CON DATOS REALES</b>\n"
+                f"Canal destino: <b>{channel.name}</b>\n"
+                f"Emisor: <b>@{bot_uname}</b>\n\n"
+                f"🎉 <b>Flota Saludable:</b> Todas las terminales operan dentro de los umbrales normales.\n"
+                f"• Total enlaces supervisados: <b>{len(terminals)}</b>\n"
+                f"• Alertas vigentes: <b>0</b>"
+            )
+            await telegram_service.send_message(token, channel.chat_id, healthy_msg)
+            return {
+                "success": True,
+                "alerts_count": 0,
+                "sent_count": 1,
+                "channel_name": channel.name,
+                "bot_username": bot_uname,
+                "message": f"Flota saludable (0 alertas vigentes). Reporte de estado enviado al canal '{channel.name}' vía @{bot_uname}"
+            }
 
 alert_service = AlertService()
