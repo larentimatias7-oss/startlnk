@@ -17,7 +17,10 @@ import {
   HelpCircle,
   CheckCircle2,
   ExternalLink,
-  Bot
+  Bot,
+  Layers,
+  Radio,
+  Timer
 } from 'lucide-react';
 
 export default function AlertConfigView({ onNotify, isEmbedded = false }) {
@@ -25,10 +28,13 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
   const [loading, setLoading] = useState(false);
   const [testingId, setTestingId] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
-  const [showToken, setShowToken] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
-  const [verifyingBot, setVerifyingBot] = useState(false);
-  const [verifiedBotInfo, setVerifiedBotInfo] = useState(null);
+
+  // Bots State
+  const [bots, setBots] = useState([]);
+  const [newBot, setNewBot] = useState({ name: '', token: '', is_default: false });
+  const [addingBot, setAddingBot] = useState(false);
+  const [showNewBotToken, setShowNewBotToken] = useState(false);
 
   // Configuration Form State
   const [config, setConfig] = useState({
@@ -39,11 +45,12 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
     early_warning_days_remaining: 15,
     alert_on_offline: false,
     cooldown_hours: 12,
+    sync_interval_minutes: 15,
     is_enabled: true
   });
 
   const [channels, setChannels] = useState([]);
-  const [newChannel, setNewChannel] = useState({ name: '', chat_id: '' });
+  const [newChannel, setNewChannel] = useState({ name: '', chat_id: '', bot_id: '' });
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
@@ -53,95 +60,113 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [resCfg, resChans, resHist] = await Promise.all([
+      const [resCfg, resBots, resChans, resHist] = await Promise.all([
         fetch('/api/alerts/config').then(r => r.json()),
+        fetch('/api/alerts/bots').then(r => r.json()),
         fetch('/api/alerts/channels').then(r => r.json()),
         fetch('/api/alerts/history').then(r => r.json())
       ]);
 
-      if (resCfg) {
-        setConfig(resCfg);
-        if (resCfg.telegram_bot_token) {
-          // Verify bot silently to show username badge if already configured
-          checkBotToken(resCfg.telegram_bot_token, false);
-        }
-      }
+      if (resCfg) setConfig(resCfg);
+      if (Array.isArray(resBots)) setBots(resBots);
       if (Array.isArray(resChans)) setChannels(resChans);
       if (Array.isArray(resHist)) setHistory(resHist);
     } catch (e) {
       console.error(e);
-      if (onNotify) onNotify('Error al cargar parámetros de alerta', 'error');
+      if (onNotify) onNotify('Error al cargar datos del sistema de alertas', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const checkBotToken = async (tokenToCheck, notifyUser = true) => {
-    if (!tokenToCheck || !tokenToCheck.trim()) {
-      if (notifyUser && onNotify) onNotify('Ingresa un token para verificar', 'warning');
+  // --- Bot Handlers ---
+
+  const handleAddBot = async (e) => {
+    e.preventDefault();
+    if (!newBot.name.trim() || !newBot.token.trim()) {
+      if (onNotify) onNotify('Ingresa un nombre y el token provisto por @BotFather', 'warning');
       return;
     }
 
-    setVerifyingBot(true);
+    setAddingBot(true);
     try {
-      const res = await fetch('/api/alerts/verify-bot', {
+      const res = await fetch('/api/alerts/bots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bot_token: tokenToCheck.trim() })
+        body: JSON.stringify({
+          name: newBot.name.trim(),
+          token: newBot.token.trim(),
+          is_default: newBot.is_default
+        })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setVerifiedBotInfo(data);
-        // Guardar automáticamente el token validado en la base de datos
-        try {
-          await fetch('/api/alerts/config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...config, telegram_bot_token: tokenToCheck.trim() })
-          });
-        } catch (saveErr) {
-          console.error('Error al autoguardar token:', saveErr);
-        }
-        if (notifyUser && onNotify) {
-          onNotify(`✅ Bot verificado y conectado: @${data.bot_username} (${data.bot_name})`, 'success');
-        }
+      if (res.ok) {
+        if (onNotify) onNotify(`✅ Bot '@${data.bot_username}' conectado exitosamente`, 'success');
+        setNewBot({ name: '', token: '', is_default: false });
+        // Reload bots
+        const updatedBots = await fetch('/api/alerts/bots').then(r => r.json());
+        if (Array.isArray(updatedBots)) setBots(updatedBots);
       } else {
-        setVerifiedBotInfo(null);
-        if (notifyUser && onNotify) {
-          onNotify(`Token inválido: ${data.detail || data.error}`, 'error');
-        }
+        if (onNotify) onNotify(`Error: ${data.detail || data.error}`, 'error');
       }
     } catch (err) {
-      console.error(err);
-      if (notifyUser && onNotify) onNotify('Error de conexión al verificar bot', 'error');
+      if (onNotify) onNotify('Error de conexión al registrar bot', 'error');
     } finally {
-      setVerifyingBot(false);
+      setAddingBot(false);
     }
   };
 
-  const handleSaveConfig = async () => {
-    setLoading(true);
+  const handleToggleBot = async (botId, currentActive) => {
     try {
-      const res = await fetch('/api/alerts/config', {
+      const res = await fetch(`/api/alerts/bots/${botId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({ is_active: !currentActive })
       });
       if (res.ok) {
-        if (onNotify) onNotify('Parámetros de alertas guardados exitosamente', 'success');
-        if (config.telegram_bot_token) {
-          checkBotToken(config.telegram_bot_token, false);
-        }
-      } else {
-        const err = await res.json();
-        if (onNotify) onNotify(err.detail || 'Error al guardar configuración', 'error');
+        const updated = await res.json();
+        setBots(prev => prev.map(b => b.id === botId ? updated : b));
+        if (onNotify) onNotify(`Bot '${updated.name}' ${updated.is_active ? 'activado' : 'pausado'}`, 'info');
       }
     } catch (e) {
-      if (onNotify) onNotify('Error al conectar con la API', 'error');
-    } finally {
-      setLoading(false);
+      if (onNotify) onNotify('Error al actualizar bot', 'error');
     }
   };
+
+  const handleSetDefaultBot = async (botId) => {
+    try {
+      const res = await fetch(`/api/alerts/bots/${botId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_default: true })
+      });
+      if (res.ok) {
+        const updatedBots = await fetch('/api/alerts/bots').then(r => r.json());
+        if (Array.isArray(updatedBots)) setBots(updatedBots);
+        if (onNotify) onNotify('Bot predeterminado actualizado', 'success');
+      }
+    } catch (e) {
+      if (onNotify) onNotify('Error al configurar bot predeterminado', 'error');
+    }
+  };
+
+  const handleDeleteBot = async (botId, name) => {
+    if (!window.confirm(`¿Seguro que deseas eliminar el bot "${name}"? Los canales vinculados usarán el bot predeterminado.`)) return;
+    try {
+      const res = await fetch(`/api/alerts/bots/${botId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setBots(prev => prev.filter(b => b.id !== botId));
+        // Reload channels to refresh unlinked bots
+        const updatedChans = await fetch('/api/alerts/channels').then(r => r.json());
+        if (Array.isArray(updatedChans)) setChannels(updatedChans);
+        if (onNotify) onNotify(`Bot '${name}' eliminado`, 'info');
+      }
+    } catch (e) {
+      if (onNotify) onNotify('Error al eliminar bot', 'error');
+    }
+  };
+
+  // --- Channel Handlers ---
 
   const handleAddChannel = async (e) => {
     e.preventDefault();
@@ -151,15 +176,21 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
     }
 
     try {
+      const payload = {
+        name: newChannel.name.trim(),
+        chat_id: newChannel.chat_id.trim(),
+        bot_id: newChannel.bot_id ? parseInt(newChannel.bot_id) : null
+      };
+
       const res = await fetch('/api/alerts/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newChannel, is_active: true })
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const created = await res.json();
         setChannels(prev => [...prev, created]);
-        setNewChannel({ name: '', chat_id: '' });
+        setNewChannel({ name: '', chat_id: '', bot_id: '' });
         if (onNotify) onNotify(`Canal '${created.name}' registrado exitosamente`, 'success');
       } else {
         const err = await res.json();
@@ -167,6 +198,23 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
       }
     } catch (e) {
       if (onNotify) onNotify('Error de conexión al registrar canal', 'error');
+    }
+  };
+
+  const handleChannelBotChange = async (channelId, newBotId) => {
+    try {
+      const res = await fetch(`/api/alerts/channels/${channelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bot_id: newBotId ? parseInt(newBotId) : null })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setChannels(prev => prev.map(c => c.id === channelId ? updated : c));
+        if (onNotify) onNotify(`Bot emisor actualizado para '${updated.name}'`, 'info');
+      }
+    } catch (e) {
+      if (onNotify) onNotify('Error al actualizar bot del canal', 'error');
     }
   };
 
@@ -201,11 +249,6 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
   };
 
   const handleTestChannel = async (channel) => {
-    if (!config.telegram_bot_token || !config.telegram_bot_token.trim()) {
-      if (onNotify) onNotify('Configura y guarda primero el Bot Token de Telegram', 'warning');
-      return;
-    }
-
     setTestingId(channel.id);
     try {
       const res = await fetch('/api/alerts/test-telegram', {
@@ -213,12 +256,13 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: channel.chat_id,
-          custom_bot_token: config.telegram_bot_token
+          bot_id: channel.bot_id
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        if (onNotify) onNotify(`✅ Mensaje de prueba entregado a '${channel.name}'`, 'success');
+        const sender = channel.bot_username ? `@${channel.bot_username}` : 'Bot activo';
+        if (onNotify) onNotify(`✅ Mensaje entregado a '${channel.name}' vía ${sender}`, 'success');
       } else {
         if (onNotify) onNotify(`Error en Telegram: ${data.detail || data.error}`, 'error');
       }
@@ -226,6 +270,31 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
       if (onNotify) onNotify('Error al enviar prueba a Telegram', 'error');
     } finally {
       setTestingId(null);
+    }
+  };
+
+  // --- Configuration Handlers ---
+
+  const handleSaveConfig = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/alerts/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setConfig(saved);
+        if (onNotify) onNotify('Parámetros de monitoreo y alertas guardados exitosamente', 'success');
+      } else {
+        const err = await res.json();
+        if (onNotify) onNotify(err.detail || 'Error al guardar configuración', 'error');
+      }
+    } catch (e) {
+      if (onNotify) onNotify('Error al conectar con la API', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -248,42 +317,46 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
     }
   };
 
+  const SYNC_PRESETS = [5, 10, 15, 30, 60];
+  const COOLDOWN_PRESETS = [2, 4, 6, 12, 24];
+
   return (
-    <div className={`space-y-5 ${isEmbedded ? '' : 'animate-fadeIn'}`}>
-      {/* Top Banner / Navigation Tabs */}
-      <div className="bg-[#1A222B] border border-[#2D3742] rounded-xl p-4 sm:p-5 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#2D3742]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)] flex items-center justify-center shrink-0">
-              <Bell className="w-5 h-5" />
+    <div className={`space-y-6 ${isEmbedded ? 'p-1' : 'p-6 max-w-7xl mx-auto animate-fadeIn'}`}>
+      {/* Top Banner / Header */}
+      {!isEmbedded && (
+        <div className="bg-[#1A222B] border border-[#2D3742] rounded-xl p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-[rgba(243,146,0,0.12)] border border-[#F39200]/30 text-[#F39200] flex items-center justify-center shrink-0">
+              <Bell className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-lg font-bold text-white tracking-tight">
                 Centro de Configuración de Alertas & Bots de Telegram
               </h2>
-              <p className="text-xs text-[#94A3B8]">
-                Supervisa el consumo de ancho de banda, parametriza el algoritmo predictivo de ritmo acelerado y administra canales de despacho.
+              <p className="text-xs text-[#94A3B8] mt-0.5">
+                Supervisa el consumo de ancho de banda, gestiona múltiples bots, parametriza frecuencias de monitoreo y canales de guardia.
               </p>
             </div>
           </div>
 
-          {/* Quick Evaluation Button */}
           <button
             onClick={handleEvaluateNow}
             disabled={evaluating}
-            className="self-start md:self-auto flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[rgba(243,146,0,0.16)] hover:bg-[#F39200] text-[#F39200] hover:text-slate-950 border border-[rgba(243,146,0,0.35)] text-xs font-bold transition-all shadow-sm"
+            className="px-4 py-2.5 rounded-lg bg-[#222C38] hover:bg-[#2D3742] text-[#F39200] border border-[#F39200]/30 hover:border-[#F39200] text-xs font-bold transition-all flex items-center gap-2 shrink-0 shadow-sm"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${evaluating ? 'animate-spin' : ''}`} />
-            <span>{evaluating ? 'Evaluando flota...' : 'Evaluar Flota en Vivo'}</span>
+            <RefreshCw className={`w-4 h-4 ${evaluating ? 'animate-spin' : ''}`} />
+            <span>{evaluating ? 'Evaluando...' : 'Evaluar Flota en Vivo'}</span>
           </button>
         </div>
+      )}
 
-        {/* Sub-Tabs Selector */}
-        <div className="flex items-center gap-2 pt-3 overflow-x-auto text-xs font-bold">
+      {/* Navigation Sub-Tabs */}
+      <div className="border-b border-[#2D3742] flex items-center justify-between">
+        <div className="flex space-x-2">
           {[
-            { id: 'telegram', label: '1. Bots & Canales de Telegram', icon: Send, badge: `${channels.length} canales` },
-            { id: 'rules', label: '2. Reglas de Consumo & Umbrales', icon: Sliders },
-            { id: 'history', label: '3. Bitácora de Alertas Despachadas', icon: History, badge: history.length }
+            { id: 'telegram', label: '1. Bots & Canales de Telegram', icon: Send, count: channels.length },
+            { id: 'rules', label: '2. Reglas, Umbrales & Tiempos', icon: Sliders },
+            { id: 'history', label: '3. Bitácora de Alertas Despachadas', icon: History, count: history.length }
           ].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -291,19 +364,19 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 py-3 px-4 font-bold text-xs border-b-2 transition-colors ${
                   isActive
-                    ? 'bg-[#F39200] text-slate-950 shadow-sm'
-                    : 'bg-[#141B22] text-[#94A3B8] hover:text-white hover:bg-[#222C38] border border-[#2D3742]'
+                    ? 'border-[#F39200] text-[#F39200] bg-[rgba(243,146,0,0.06)]'
+                    : 'border-transparent text-[#94A3B8] hover:text-white hover:border-[#64748B]'
                 }`}
               >
                 <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
-                {tab.badge && (
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-[#222C38] text-[#94A3B8]'
+                {tab.count !== undefined && (
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    isActive ? 'bg-[#F39200] text-slate-950' : 'bg-[#222C38] text-[#94A3B8]'
                   }`}>
-                    {tab.badge}
+                    {tab.count}
                   </span>
                 )}
               </button>
@@ -312,12 +385,13 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
         </div>
       </div>
 
-      {/* TAB 1: TELEGRAM BOT & CHANNELS */}
+      {/* TAB 1: TELEGRAM MULTI-BOTS & CHANNELS */}
       {activeTab === 'telegram' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left 2 Cols: Bot Configuration & Channel List */}
+          {/* Left 2 Cols: Multi-Bot Management & Channel List */}
           <div className="lg:col-span-2 space-y-5">
-            {/* Telegram Bot Token Card */}
+            
+            {/* Multi-Bot Management Card */}
             <div className="bg-[#1A222B] border border-[#2D3742] rounded-xl p-5 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -325,79 +399,150 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                     <Bot className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">Bot de Telegram Oficial</h3>
-                    <p className="text-[11px] text-[#94A3B8]">Token provisto por @BotFather para emitir notificaciones</p>
+                    <h3 className="text-sm font-bold text-white">Bots de Telegram Conectados</h3>
+                    <p className="text-[11px] text-[#94A3B8]">
+                      Puedes registrar múltiples bots oficiales para derivar notificaciones según área o criticidad
+                    </p>
                   </div>
                 </div>
 
-                {/* Status Badge */}
-                {verifiedBotInfo ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[#38A169]/30 text-xs font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    @{verifiedBotInfo.bot_username}
-                  </span>
-                ) : (
-                  <span className="text-xs text-[#94A3B8] font-mono px-2 py-1 rounded bg-[#141B22] border border-[#2D3742]">
-                    Sin verificar
-                  </span>
-                )}
+                <span className="text-xs text-[#3182CE] font-mono font-bold px-2 py-0.5 rounded bg-[rgba(49,130,206,0.12)] border border-[rgba(49,130,206,0.3)]">
+                  {bots.filter(b => b.is_active).length} activos de {bots.length}
+                </span>
               </div>
 
-              {/* Token Input + Action Buttons */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      type={showToken ? 'text' : 'password'}
-                      value={config.telegram_bot_token || ''}
-                      onChange={e => {
-                        setConfig(prev => ({ ...prev, telegram_bot_token: e.target.value }));
-                        setVerifiedBotInfo(null);
-                      }}
-                      placeholder="Pega aquí el Token (ej: 7283948192:AAH9fklw_xyz981245...)"
-                      className="w-full pl-3.5 pr-10 py-2 bg-[#0F141A] border border-[#2D3742] rounded-lg text-xs text-white placeholder-[#64748B] font-mono focus:outline-none focus:border-[#F39200]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-white"
-                      title={showToken ? 'Ocultar token' : 'Ver token'}
+              {/* Bot List Cards */}
+              {bots.length === 0 ? (
+                <div className="p-6 text-center bg-[#141B22] border border-[#2D3742] rounded-lg text-[#94A3B8] text-xs">
+                  No hay bots de Telegram registrados. Conecta tu primer bot a continuación.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {bots.map(bot => (
+                    <div
+                      key={bot.id}
+                      className="p-3.5 bg-[#141B22] border border-[#2D3742] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-[#3182CE]/40 transition-colors"
                     >
-                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-white truncate">{bot.name}</span>
+                          <span className="text-xs text-[#3182CE] font-mono font-semibold">
+                            @{bot.bot_username || 'bot'}
+                          </span>
+                          {bot.is_default && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-mono font-bold bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)]">
+                              PREDETERMINADO
+                            </span>
+                          )}
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                            bot.is_active
+                              ? 'bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[#38A169]/30'
+                              : 'bg-[#222C38] text-[#64748B]'
+                          }`}>
+                            {bot.is_active ? 'ACTIVO' : 'PAUSADO'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-mono text-[#64748B] mt-1 flex items-center gap-3">
+                          <span>Token: <span className="text-[#CBD5E1]">{bot.token_masked}</span></span>
+                          <span>• Canales asociados: <strong className="text-[#F39200]">{bot.channels_count}</strong></span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        {!bot.is_default && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetDefaultBot(bot.id)}
+                            className="px-2.5 py-1 rounded bg-[#222C38] hover:bg-[#2D3742] text-[#94A3B8] hover:text-white border border-[#2D3742] text-[11px] font-semibold transition-colors"
+                            title="Hacer bot predeterminado para canales sin bot explícito"
+                          >
+                            Hacer Default
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBot(bot.id, bot.is_active)}
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors ${
+                            bot.is_active
+                              ? 'bg-[#222C38] text-[#94A3B8] hover:text-white'
+                              : 'bg-[rgba(56,161,105,0.16)] text-[#38A169] border border-[#38A169]/30'
+                          }`}
+                        >
+                          {bot.is_active ? 'Pausar' : 'Activar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteBot(bot.id, bot.name)}
+                          className="p-1.5 rounded text-[#64748B] hover:text-[#E53E3E] hover:bg-[rgba(229,62,62,0.12)] transition-colors"
+                          title="Eliminar bot"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Form: Add New Bot */}
+              <form onSubmit={handleAddBot} className="p-4 bg-[#141B22] border border-[#2D3742] rounded-lg space-y-3">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-[#3182CE]" />
+                  <span>Conectar Nuevo Bot de Telegram</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[10px] text-[#94A3B8] block mb-1">Nombre Descriptivo del Bot:</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Alertas Zabbix NOC, Bot Gerencia"
+                      value={newBot.name}
+                      onChange={e => setNewBot(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-1.5 bg-[#0F141A] border border-[#2D3742] rounded-md text-xs text-white placeholder-[#64748B] focus:outline-none focus:border-[#3182CE]"
+                    />
                   </div>
-
-                  {/* Verify Bot Live Button */}
-                  <button
-                    type="button"
-                    onClick={() => checkBotToken(config.telegram_bot_token, true)}
-                    disabled={verifyingBot}
-                    className="px-3.5 py-2 rounded-lg bg-[#222C38] hover:bg-[#2D3742] text-[#3182CE] border border-[#3182CE]/30 hover:border-[#3182CE] text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
-                    title="Verificar token contra los servidores de Telegram"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${verifyingBot ? 'animate-spin' : ''}`} />
-                    <span>{verifyingBot ? 'Verificando...' : 'Verificar Bot'}</span>
-                  </button>
-
-                  {/* Save Token Button */}
-                  <button
-                    type="button"
-                    onClick={handleSaveConfig}
-                    disabled={loading}
-                    className="px-4 py-2 rounded-lg bg-[#F39200] hover:bg-[#D98200] text-slate-950 text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Guardar</span>
-                  </button>
+                  <div>
+                    <label className="text-[10px] text-[#94A3B8] block mb-1">HTTP API Token (@BotFather):</label>
+                    <div className="relative">
+                      <input
+                        type={showNewBotToken ? 'text' : 'password'}
+                        placeholder="Ej: 8899338410:AAHP..."
+                        value={newBot.token}
+                        onChange={e => setNewBot(prev => ({ ...prev, token: e.target.value }))}
+                        className="w-full pl-3 pr-8 py-1.5 bg-[#0F141A] border border-[#2D3742] rounded-md text-xs text-white placeholder-[#64748B] font-mono focus:outline-none focus:border-[#3182CE]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewBotToken(!showNewBotToken)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-white"
+                      >
+                        {showNewBotToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {verifiedBotInfo && (
-                  <div className="p-2.5 rounded-md bg-[rgba(56,161,105,0.12)] border border-[#38A169]/30 text-xs text-[#38A169] flex items-center justify-between font-mono">
-                    <span>✅ Conectado a: <strong>{verifiedBotInfo.bot_name}</strong> (@{verifiedBotInfo.bot_username})</span>
-                    <span className="text-[10px] text-[#94A3B8]">ID: {verifiedBotInfo.bot_id}</span>
-                  </div>
-                )}
-              </div>
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-[#CBD5E1]">
+                    <input
+                      type="checkbox"
+                      checked={newBot.is_default}
+                      onChange={e => setNewBot(prev => ({ ...prev, is_default: e.target.checked }))}
+                      className="rounded bg-[#0F141A] border-[#2D3742] text-[#3182CE] focus:ring-0"
+                    />
+                    <span>Establecer como bot predeterminado</span>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={addingBot}
+                    className="px-4 py-1.5 rounded-lg bg-[#222C38] hover:bg-[#2D3742] text-[#3182CE] border border-[#3182CE]/30 hover:border-[#3182CE] font-bold text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${addingBot ? 'animate-spin' : ''}`} />
+                    <span>{addingBot ? 'Validando con Telegram...' : '+ Validar y Conectar Bot'}</span>
+                  </button>
+                </div>
+              </form>
             </div>
 
             {/* Channels & Groups List Card */}
@@ -406,7 +551,7 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                 <div>
                   <h3 className="text-sm font-bold text-white">Canales y Grupos Destinatarios</h3>
                   <p className="text-[11px] text-[#94A3B8]">
-                    Destinos donde se enviarán las alertas automáticas de la flota
+                    Destinos donde se enviarán las alertas automáticas de la flota asociadas a su bot correspondiente
                   </p>
                 </div>
                 <span className="text-xs text-[#F39200] font-mono font-bold px-2 py-0.5 rounded bg-[rgba(243,146,0,0.16)] border border-[rgba(243,146,0,0.3)]">
@@ -424,7 +569,7 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                   {channels.map(ch => (
                     <div
                       key={ch.id}
-                      className="p-3.5 bg-[#141B22] border border-[#2D3742] rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-[#F39200]/30 transition-colors"
+                      className="p-3.5 bg-[#141B22] border border-[#2D3742] rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-[#F39200]/30 transition-colors"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -437,13 +582,28 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                             {ch.is_active ? 'ACTIVO' : 'PAUSADO'}
                           </span>
                         </div>
-                        <div className="text-[11px] font-mono text-[#64748B] mt-1">
-                          Chat ID: <span className="text-[#CBD5E1]">{ch.chat_id}</span>
+                        <div className="text-[11px] font-mono text-[#64748B] mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span>Chat ID: <span className="text-[#CBD5E1]">{ch.chat_id}</span></span>
+                          <span className="flex items-center gap-1.5">
+                            • Bot Emisor:
+                            <select
+                              value={ch.bot_id || ''}
+                              onChange={e => handleChannelBotChange(ch.id, e.target.value)}
+                              className="bg-[#0F141A] border border-[#2D3742] rounded text-[11px] text-[#3182CE] font-sans px-1.5 py-0.5 focus:outline-none focus:border-[#3182CE]"
+                            >
+                              <option value="">(Predeterminado)</option>
+                              {bots.map(b => (
+                                <option key={b.id} value={b.id}>
+                                  {b.name} (@{b.bot_username})
+                                </option>
+                              ))}
+                            </select>
+                          </span>
                         </div>
                       </div>
 
                       {/* Channel Controls: Test, Pause/Resume, Delete */}
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
                         <button
                           type="button"
                           onClick={() => handleTestChannel(ch)}
@@ -487,7 +647,7 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                   <Plus className="w-4 h-4 text-[#F39200]" />
                   <span>Agregar Nuevo Canal o Grupo de Telegram</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
                     <label className="text-[10px] text-[#94A3B8] block mb-1">Nombre Descriptivo:</label>
                     <input
@@ -502,11 +662,26 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                     <label className="text-[10px] text-[#94A3B8] block mb-1">Chat ID del Grupo/Canal:</label>
                     <input
                       type="text"
-                      placeholder="Ej: -100192837482 o @nombrecanal"
+                      placeholder="Ej: -100192837482"
                       value={newChannel.chat_id}
                       onChange={e => setNewChannel(prev => ({ ...prev, chat_id: e.target.value }))}
                       className="w-full px-3 py-1.5 bg-[#0F141A] border border-[#2D3742] rounded-md text-xs text-white placeholder-[#64748B] font-mono focus:outline-none focus:border-[#F39200]"
                     />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[#94A3B8] block mb-1">Bot Emisor Asociado:</label>
+                    <select
+                      value={newChannel.bot_id}
+                      onChange={e => setNewChannel(prev => ({ ...prev, bot_id: e.target.value }))}
+                      className="w-full px-3 py-1.5 bg-[#0F141A] border border-[#2D3742] rounded-md text-xs text-white focus:outline-none focus:border-[#F39200]"
+                    >
+                      <option value="">Bot Predeterminado</option>
+                      {bots.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} (@{b.bot_username})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -547,15 +722,18 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                 </div>
               </div>
 
-              <div className="p-3 rounded-lg bg-[rgba(49,130,206,0.12)] border border-[#3182CE]/30 text-[#3182CE] text-[11px]">
-                <strong>💡 Tip Milicic:</strong> Puedes registrar múltiples grupos para distintas áreas (ej: Guardias NOC, Jefatura de Comunicaciones o Logística).
+              <div className="p-3 rounded-lg bg-[rgba(49,130,206,0.12)] border border-[#3182CE]/30 text-[#3182CE] text-[11px] space-y-1">
+                <strong>💡 Arquitectura Multi-Bot Milicic:</strong>
+                <p>
+                  Puedes tener un bot para Infraestructura Crítica (@inframilicic_bot) y otro para Telemetría Zabbix. Al crear o editar un canal, eliges qué bot emitirá las alertas hacia ese grupo específico.
+                </p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: RULES AND THRESHOLDS PARAMETERIZATION */}
+      {/* TAB 2: RULES, THRESHOLDS & MONITORING FREQUENCIES */}
       {activeTab === 'rules' && (
         <div className="bg-[#1A222B] border border-[#2D3742] rounded-xl p-5 space-y-5 shadow-sm">
           {/* Master Toggle */}
@@ -577,6 +755,113 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
                 config.is_enabled ? 'translate-x-6' : 'translate-x-0'
               }`} />
             </button>
+          </div>
+
+          {/* Section: Monitoring Frequencies & Anti-Spam Cadence */}
+          <div className="p-4 bg-[#141B22] border border-[#F39200]/30 rounded-lg space-y-4">
+            <div className="flex items-center gap-2">
+              <Timer className="w-4 h-4 text-[#F39200]" />
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Frecuencias de Monitoreo y Cadencia de Notificaciones
+              </h4>
+            </div>
+            <p className="text-xs text-[#94A3B8]">
+              Parametriza con qué periodicidad el sistema evalúa los enlaces y cada cuánto tiempo vuelve a avisar en Telegram si la condición continúa.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+              {/* 1. Evaluation Frequency */}
+              <div className="space-y-3 bg-[#0F141A] p-3.5 rounded-lg border border-[#2D3742]">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#CBD5E1] font-semibold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-[#3182CE]" />
+                    <span>Intervalo de Evaluación de Flota:</span>
+                  </span>
+                  <strong className="text-[#3182CE] font-mono text-sm">
+                    Cada {config.sync_interval_minutes} minutos
+                  </strong>
+                </div>
+
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  step="5"
+                  value={config.sync_interval_minutes}
+                  onChange={e => setConfig(prev => ({ ...prev, sync_interval_minutes: parseInt(e.target.value) }))}
+                  className="w-full accent-[#3182CE] cursor-pointer"
+                />
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#64748B]">Presets:</span>
+                  {SYNC_PRESETS.map(min => (
+                    <button
+                      key={min}
+                      type="button"
+                      onClick={() => setConfig(prev => ({ ...prev, sync_interval_minutes: min }))}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-colors ${
+                        config.sync_interval_minutes === min
+                          ? 'bg-[#3182CE] text-white'
+                          : 'bg-[#222C38] text-[#94A3B8] hover:text-white'
+                      }`}
+                    >
+                      {min}m {min === 15 ? '(Recom.)' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-[10px] text-[#64748B] block leading-relaxed">
+                  Frecuencia con la que el planificador de fondo consulta a TSM ECHO y evalúa las 13 antenas. Los cambios se reprograman en caliente inmediatamente.
+                </span>
+              </div>
+
+              {/* 2. Cooldown Anti-Spam */}
+              <div className="space-y-3 bg-[#0F141A] p-3.5 rounded-lg border border-[#2D3742]">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#CBD5E1] font-semibold flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#F39200]" />
+                    <span>Re-notificación Anti-Spam (Cooldown):</span>
+                  </span>
+                  <strong className="text-[#F39200] font-mono text-sm">
+                    Cada {config.cooldown_hours} horas
+                  </strong>
+                </div>
+
+                <input
+                  type="range"
+                  min="1"
+                  max="24"
+                  step="1"
+                  value={config.cooldown_hours}
+                  onChange={e => setConfig(prev => ({ ...prev, cooldown_hours: parseInt(e.target.value) }))}
+                  className="w-full accent-[#F39200] cursor-pointer"
+                />
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#64748B]">Presets:</span>
+                  {COOLDOWN_PRESETS.map(h => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => setConfig(prev => ({ ...prev, cooldown_hours: h }))}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-colors ${
+                        config.cooldown_hours === h
+                          ? 'bg-[#F39200] text-slate-950'
+                          : 'bg-[#222C38] text-[#94A3B8] hover:text-white'
+                      }`}
+                    >
+                      {h}h {h === 12 ? '(Recom.)' : ''}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-[10px] text-[#64748B] block leading-relaxed">
+                  Tiempo mínimo antes de volver a alertar sobre una antena que continúe en sobreconsumo o ritmo acelerado, evitando spam en los canales de guardia.
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -681,46 +966,25 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
             </div>
           </div>
 
-          {/* Regla 3 y 4: Offline Alert y Anti-Spam Cooldown */}
-          <div className="p-4 bg-[#141B22] border border-[#2D3742] rounded-lg grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-white block">Alerta por Enlace Desconectado (Offline)</span>
-                <span className="text-[11px] text-[#94A3B8]">
-                  Enviar mensaje inmediato si una antena en obra pierde el enlace satelital.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setConfig(prev => ({ ...prev, alert_on_offline: !prev.alert_on_offline }))}
-                className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
-                  config.alert_on_offline ? 'bg-[#38A169]' : 'bg-[#2D3742]'
-                }`}
-              >
-                <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
-                  config.alert_on_offline ? 'translate-x-5' : 'translate-x-0'
-                }`} />
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-[#CBD5E1] font-semibold">Ventana Anti-Spam (Cooldown):</span>
-                <strong className="text-[#F39200] font-mono">{config.cooldown_hours} horas</strong>
-              </div>
-              <input
-                type="range"
-                min="2"
-                max="48"
-                step="2"
-                value={config.cooldown_hours}
-                onChange={e => setConfig(prev => ({ ...prev, cooldown_hours: parseInt(e.target.value) }))}
-                className="w-full accent-[#F39200] cursor-pointer"
-              />
-              <span className="text-[10px] text-[#64748B] block">
-                No repetirá la misma alerta para la misma antena durante este período.
+          {/* Regla 3: Offline Alert */}
+          <div className="p-4 bg-[#141B22] border border-[#2D3742] rounded-lg flex items-center justify-between">
+            <div>
+              <span className="text-xs font-bold text-white block">Alerta por Enlace Desconectado (Offline)</span>
+              <span className="text-[11px] text-[#94A3B8]">
+                Enviar mensaje inmediato si una antena en obra pierde el enlace satelital.
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => setConfig(prev => ({ ...prev, alert_on_offline: !prev.alert_on_offline }))}
+              className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
+                config.alert_on_offline ? 'bg-[#38A169]' : 'bg-[#2D3742]'
+              }`}
+            >
+              <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                config.alert_on_offline ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </button>
           </div>
 
           {/* Action Save Bar */}

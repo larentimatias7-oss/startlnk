@@ -108,9 +108,20 @@ class AlertService:
         bot_token = config.telegram_bot_token
         channels = db.query(TelegramChannel).filter(TelegramChannel.is_active == True).all()
 
-        if not bot_token or not channels:
-            logger.info("Alert evaluation: No bot token or active telegram channels configured.")
-            return {"status": "SKIPPED", "message": "No hay Bot Token o canales de Telegram activos"}
+        # Fetch active channels
+        channels = db.query(TelegramChannel).filter(TelegramChannel.is_active == True).all()
+        if not channels:
+            logger.info("Alert evaluation: No active telegram channels configured.")
+            return {"status": "SKIPPED", "message": "No hay canales de Telegram activos"}
+
+        # Check for active bots or fallback config token
+        from backend.app.models.terminal import TelegramBot
+        active_bots = db.query(TelegramBot).filter(TelegramBot.is_active == True).all()
+        fallback_token = config.telegram_bot_token
+
+        if not active_bots and not fallback_token:
+            logger.info("Alert evaluation: No active telegram bots or token configured.")
+            return {"status": "SKIPPED", "message": "No hay Bots de Telegram activos o token configurado"}
 
         terminals = db.query(Terminal).all()
         alerts_generated = 0
@@ -157,7 +168,7 @@ class AlertService:
                         days_remaining=days_remaining, downlink=t.downlink_mbps,
                         uplink=t.uplink_mbps, ping=t.ping_ms, severity="CRITICAL"
                     )
-                    sent_count = await self._broadcast(bot_token, channels, msg)
+                    sent_count = await self._broadcast(db, channels, msg, fallback_token)
                     self._record_event(
                         db, t.id, nickname, sl, alert_type, "CRITICAL",
                         f"Cuota agotada: {consumed_gb:.1f} / {total_gb:.0f} GB ({percent:.1f}%)",
@@ -174,7 +185,7 @@ class AlertService:
                         days_remaining=days_remaining, downlink=t.downlink_mbps,
                         uplink=t.uplink_mbps, ping=t.ping_ms, severity="WARNING"
                     )
-                    sent_count = await self._broadcast(bot_token, channels, msg)
+                    sent_count = await self._broadcast(db, channels, msg, fallback_token)
                     self._record_event(
                         db, t.id, nickname, sl, alert_type, "WARNING",
                         f"Umbral superado: {consumed_gb:.1f} / {total_gb:.0f} GB ({percent:.1f}%)",
@@ -194,7 +205,7 @@ class AlertService:
                         days_remaining=days_remaining, daily_burn_rate=daily_rate,
                         projected_exhaustion_days=projected_days
                     )
-                    sent_count = await self._broadcast(bot_token, channels, msg)
+                    sent_count = await self._broadcast(db, channels, msg, fallback_token)
                     self._record_event(
                         db, t.id, nickname, sl, alert_type, "WARNING",
                         f"Ritmo acelerado: {percent:.1f}% consumido con {days_remaining} días restantes",
@@ -208,7 +219,7 @@ class AlertService:
                 if not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
                     alerts_generated += 1
                     msg = telegram_service.format_offline_alert(nickname, sl, account, t.ping_ms)
-                    sent_count = await self._broadcast(bot_token, channels, msg)
+                    sent_count = await self._broadcast(db, channels, msg, fallback_token)
                     self._record_event(
                         db, t.id, nickname, sl, alert_type, "WARNING",
                         f"Enlace desconectado: {nickname} pasó a Offline",
@@ -224,11 +235,22 @@ class AlertService:
             "channels_active": len(channels)
         }
 
-    async def _broadcast(self, bot_token: str, channels: List[TelegramChannel], text_html: str) -> int:
-        """Broadcasts a message to all active channels and returns count of successful deliveries."""
+    async def _broadcast(self, db: Session, channels: List[TelegramChannel], text_html: str, default_token: Optional[str] = None) -> int:
+        """Broadcasts a message to each active channel using its assigned bot (or default bot)."""
+        from backend.app.models.terminal import TelegramBot
+        bots_by_id = {b.id: b for b in db.query(TelegramBot).filter(TelegramBot.is_active == True).all()}
+        default_bot = next((b for b in bots_by_id.values() if b.is_default), None)
+        if not default_bot and bots_by_id:
+            default_bot = next(iter(bots_by_id.values()))
+
         success_count = 0
         for ch in channels:
-            res = await telegram_service.send_message(bot_token, ch.chat_id, text_html)
+            assigned_bot = bots_by_id.get(ch.bot_id) if ch.bot_id else default_bot
+            token = assigned_bot.token if assigned_bot else default_token
+            if not token:
+                logger.warning(f"No bot token available for channel {ch.name} ({ch.chat_id})")
+                continue
+            res = await telegram_service.send_message(token, ch.chat_id, text_html)
             if res.get("success"):
                 success_count += 1
             else:

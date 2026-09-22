@@ -102,8 +102,21 @@ class AlertConfig(Base):
     early_warning_days_remaining = Column(Integer, default=15) # con >= N días restantes
     alert_on_offline = Column(Boolean, default=False)
     cooldown_hours = Column(Integer, default=12) # Horas de cooldown anti-spam
+    sync_interval_minutes = Column(Integer, default=15) # Frecuencia de sincronización / evaluación
     is_enabled = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class TelegramBot(Base):
+    __tablename__ = "telegram_bots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    token = Column(String, nullable=False, unique=True)
+    bot_username = Column(String, nullable=True)
+    bot_id = Column(String, nullable=True)
+    is_default = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class TelegramChannel(Base):
     __tablename__ = "telegram_channels"
@@ -111,8 +124,11 @@ class TelegramChannel(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     chat_id = Column(String, nullable=False, unique=True)
+    bot_id = Column(Integer, ForeignKey("telegram_bots.id", ondelete="SET NULL"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    bot = relationship("TelegramBot", backref="channels")
 
 class AlertEvent(Base):
     __tablename__ = "alert_events"
