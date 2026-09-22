@@ -318,11 +318,11 @@ export default function TerminalDetailModal({
                               ...u,
                               displayDate: u.date.split('-').slice(1).join('/')
                             }))}
-                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                            margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="#242D36" vertical={false} />
                             <XAxis dataKey="displayDate" stroke="#64748B" fontSize={10} tickLine={false} />
-                            <YAxis stroke="#64748B" fontSize={10} tickLine={false} unit="GB" />
+                            <YAxis stroke="#64748B" fontSize={10} tickLine={false} width={55} unit=" GB" />
                             <Tooltip
                               contentStyle={{ backgroundColor: '#141B22', borderColor: '#2D3742', borderRadius: '6px', fontSize: '11px', color: '#F1F5F9' }}
                             />

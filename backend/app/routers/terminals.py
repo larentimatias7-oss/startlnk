@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from backend.app.core.database import get_db
 from backend.app.models.terminal import Terminal, BillingCycle, DailyUsage, SyncLog
@@ -160,16 +160,15 @@ def get_fleet_overview(db: Session = Depends(get_db)):
         sync_status=last_log.status if last_log else "UNKNOWN"
     )
 
-    # Fleet daily trend aggregated across all terminals (last 30 days chronological)
+    # Fleet daily trend aggregated across all terminals (strictly within the last 30 calendar days)
+    cutoff_date = (datetime.now(timezone.utc).date() - timedelta(days=30)).strftime("%Y-%m-%d")
     daily_sums = db.query(
         DailyUsage.date,
         func.sum(DailyUsage.total_gb).label("total_gb"),
         func.sum(DailyUsage.priority_gb).label("priority_gb"),
         func.sum(DailyUsage.opt_in_priority_gb).label("opt_in_priority_gb"),
         func.sum(DailyUsage.standard_gb).label("standard_gb")
-    ).group_by(DailyUsage.date).order_by(DailyUsage.date.desc()).limit(30).all()
-
-    daily_sums = list(reversed(daily_sums))
+    ).filter(DailyUsage.date >= cutoff_date).group_by(DailyUsage.date).order_by(DailyUsage.date.asc()).all()
 
     fleet_trend = [
         FleetDailyUsage(
