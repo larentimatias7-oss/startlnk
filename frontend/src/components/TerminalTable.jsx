@@ -21,15 +21,8 @@ import {
 } from 'lucide-react';
 
 export default function TerminalTable({
-  terminals,
-  onSelectTerminal,
-  onRequestReboot,
-  onRequestOptIn,
-  onRequestWifiSettings,
-  onRequestBypassMode,
-  onCopyNotice,
-  onOpenAlerts,
-  onToggleAlerts
+  terminals = [], onSelectTerminal, onRequestReboot, onRequestOptIn,
+  onRequestWifiSettings, onRequestBypassMode, onToggleAlerts, onCopyNotice, onOpenAlerts,
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts, burn_rate
@@ -96,8 +89,6 @@ export default function TerminalTable({
       else if (sortField === 'quota_consumed_percent') { valA = a.quota_consumed_percent || 0; valB = b.quota_consumed_percent || 0; }
       else if (sortField === 'ping_ms') { valA = a.is_online ? (a.ping_ms || 999) : 9999; valB = b.is_online ? (b.ping_ms || 999) : 9999; }
       else if (sortField === 'days_remaining') { valA = a.days_remaining ?? 999; valB = b.days_remaining ?? 999; }
-
-
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -215,9 +206,12 @@ export default function TerminalTable({
               <th
                 onClick={() => handleSort('throughput')}
                 className="py-2.5 px-4 cursor-pointer hover:text-[#F39200] transition-colors group"
-                title="Clic para ordenar por velocidad de bajada"
+                title="Clic para ordenar por velocidad en tiempo real"
               >
-                Throughput / Latencia
+                <span className="inline-flex items-center gap-1">
+                  Throughput / Latencia
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00A389] animate-pulse" title="Telemetría en tiempo real" />
+                </span>
                 {renderSortIndicator('throughput')}
               </th>
 

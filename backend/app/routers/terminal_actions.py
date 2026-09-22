@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -28,6 +29,94 @@ def _find_terminal(device_id: str, db: Session) -> Terminal:
     if not t:
         raise HTTPException(status_code=404, detail="Terminal Starlink no encontrado")
     return t
+
+@router.get("/live-telemetry-fleet", response_model=Dict[str, LiveTelemetryResponse])
+async def get_fleet_live_telemetry(db: Session = Depends(get_db)):
+    """Fetch and update real-time telemetry for all online Starlink terminals in parallel"""
+    terminals = db.query(Terminal).all()
+    if not terminals:
+        return {}
+
+    online_targets = [t for t in terminals if t.is_online]
+    if not online_targets:
+        online_targets = terminals
+
+    sem = asyncio.Semaphore(6)
+
+    async def fetch_terminal_telemetry(t: Terminal):
+        clean_id = t.raw_device_id or t.device_id.removeprefix("ut")
+        downlink = t.downlink_mbps
+        uplink = t.uplink_mbps
+        ping = t.ping_ms
+        signal = t.signal_quality
+        obstruction = t.obstruction_percent
+        uptime = t.uptime_seconds
+        wifi_bypassed = t.wifi_bypassed
+        router_id = t.router_id
+        config_id = None
+
+        if echo_client.has_credentials:
+            async with sem:
+                try:
+                    telemetry = await echo_client.get_user_terminal_telemetry(clean_id)
+                    if telemetry:
+                        dl_val = float(telemetry.get("ut_DownlinkThroughput") or 0.0)
+                        ul_val = float(telemetry.get("ut_UplinkThroughput") or 0.0)
+                        downlink = round(dl_val / 1_000_000.0, 2) if dl_val > 100_000 else round(dl_val, 2)
+                        uplink = round(ul_val / 1_000_000.0, 2) if ul_val > 100_000 else round(ul_val, 2)
+                        ping = round(float(telemetry.get("ut_PingLatencyMsAvg") or telemetry.get("r_InternetPingLatencyMs") or t.ping_ms or 0.0), 1)
+                        signal = round(float(telemetry.get("ut_SignalQuality") or 100.0), 1)
+                        obstruction = round(float(telemetry.get("ut_ObstructionPercentTime") or 0.0), 2)
+                        uptime = int(telemetry.get("ut_Uptime") or 0)
+                        wifi_bypassed = bool(telemetry.get("r_WifiIsBypassed"))
+                        router_id = telemetry.get("ri_routerId") or t.router_id
+                        config_id = telemetry.get("ri_configId")
+
+                        # Update DB object
+                        t.downlink_mbps = downlink
+                        t.uplink_mbps = uplink
+                        t.ping_ms = ping
+                        t.signal_quality = signal
+                        t.obstruction_percent = obstruction
+                        t.uptime_seconds = uptime
+                        t.wifi_bypassed = wifi_bypassed
+                        if router_id:
+                            t.router_id = router_id
+                except Exception as e:
+                    logger.warning(f"Error fetching live telemetry for {t.device_id}: {e}")
+
+        resp_item = LiveTelemetryResponse(
+            device_id=t.device_id,
+            is_online=t.is_online,
+            downlink_mbps=downlink,
+            uplink_mbps=uplink,
+            ping_ms=ping,
+            signal_quality=signal,
+            obstruction_percent=obstruction,
+            uptime_seconds=uptime,
+            wifi_bypassed=wifi_bypassed,
+            router_id=router_id,
+            config_id=config_id,
+            has_public_ip=t.has_public_ip
+        )
+        return t.device_id, clean_id, resp_item
+
+    results = await asyncio.gather(*(fetch_terminal_telemetry(t) for t in online_targets), return_exceptions=True)
+    try:
+        db.commit()
+    except Exception as commit_err:
+        db.rollback()
+        logger.error(f"Error committing fleet live telemetry updates: {commit_err}")
+
+    telemetry_map = {}
+    for item in results:
+        if isinstance(item, tuple) and len(item) == 3:
+            dev_id, clean_id, resp_obj = item
+            telemetry_map[dev_id] = resp_obj
+            telemetry_map[clean_id] = resp_obj
+            telemetry_map[f"ut{clean_id}"] = resp_obj
+
+    return telemetry_map
 
 @router.get("/{device_id}/live-telemetry", response_model=LiveTelemetryResponse)
 async def get_live_telemetry(device_id: str, db: Session = Depends(get_db)):

@@ -1,6 +1,7 @@
+import time
 import httpx
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ class EchoClient:
         self._perfil_id: Optional[int] = None
         self._grupo_id: Optional[int] = None
         self._client: Optional[httpx.AsyncClient] = None
+        self._telemetry_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
     @property
     def base_url(self) -> str:
@@ -126,15 +128,26 @@ class EchoClient:
             res = await self._request("GET", f"/stDeviceLists/user/{self._user_id}")
         return res if isinstance(res, list) else []
 
-    async def get_user_terminal_telemetry(self, device_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user_terminal_telemetry(self, device_id: str, force_refresh: bool = False) -> Optional[Dict[str, Any]]:
         """Fetch real-time telemetry for a terminal: GET /stDeviceIdRouters/userterminal/{deviceId}"""
         clean_id = device_id.removeprefix("ut")
+        now = time.time()
+
+        if not force_refresh and clean_id in self._telemetry_cache:
+            ts, cached_data = self._telemetry_cache[clean_id]
+            if now - ts < 6.0:  # 6 second cache window
+                return cached_data
+
         res = await self._request("GET", f"/stDeviceIdRouters/userterminal/{clean_id}")
+        data = None
         if isinstance(res, list) and len(res) > 0:
-            return res[0]
+            data = res[0]
         elif isinstance(res, dict):
-            return res
-        return None
+            data = res
+
+        if data:
+            self._telemetry_cache[clean_id] = (now, data)
+        return data
 
     async def get_billing_cycles(self, service_line_number: str) -> List[Dict[str, Any]]:
         """Fetch billing cycles for a service line: GET /billingCycles/{serviceLineNumber}"""

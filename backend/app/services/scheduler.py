@@ -19,6 +19,32 @@ async def scheduled_sync_job():
     finally:
         db.close()
 
+async def scheduled_telemetry_job():
+    """Periodic background task to keep online terminal throughput fresh in SQLite"""
+    try:
+        from backend.app.services.echo_client import echo_client
+        from backend.app.models.terminal import Terminal
+        if not echo_client.has_credentials:
+            return
+
+        db = SessionLocal()
+        try:
+            online_terminals = db.query(Terminal).filter(Terminal.is_online == True).all()
+            for t in online_terminals:
+                clean_id = t.raw_device_id or t.device_id.removeprefix("ut")
+                telemetry = await echo_client.get_user_terminal_telemetry(clean_id)
+                if telemetry:
+                    dl_val = float(telemetry.get("ut_DownlinkThroughput") or 0.0)
+                    ul_val = float(telemetry.get("ut_UplinkThroughput") or 0.0)
+                    t.downlink_mbps = round(dl_val / 1_000_000.0, 2) if dl_val > 100_000 else round(dl_val, 2)
+                    t.uplink_mbps = round(ul_val / 1_000_000.0, 2) if ul_val > 100_000 else round(ul_val, 2)
+                    t.ping_ms = round(float(telemetry.get("ut_PingLatencyMsAvg") or telemetry.get("r_InternetPingLatencyMs") or t.ping_ms or 0.0), 1)
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Background telemetry sync job error: {e}")
+
 def start_scheduler():
     if not settings.ENABLE_SCHEDULER:
         logger.info("Background scheduler is disabled by config.")
@@ -44,8 +70,15 @@ def start_scheduler():
         id="echo_sync_job",
         replace_existing=True
     )
+    scheduler.add_job(
+        scheduled_telemetry_job,
+        "interval",
+        seconds=60,
+        id="echo_telemetry_job",
+        replace_existing=True
+    )
     scheduler.start()
-    logger.info(f"APScheduler started: ECHO sync running every {interval} minutes.")
+    logger.info(f"APScheduler started: ECHO sync running every {interval}m, telemetry every 60s.")
 
 def reschedule_sync_job(minutes: int):
     """Reschedules the sync job interval dynamically at runtime."""

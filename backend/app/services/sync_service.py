@@ -103,7 +103,9 @@ class SyncService:
                 terminal.service_line_number = sl_num
                 terminal.account_name = d.get("accountName")
                 terminal.is_online = bool(d.get("isOnline"))
-                terminal.downlink_mbps = float(d.get("downlink") or 0.0)
+                list_dl = float(d.get("downlink") or 0.0)
+                if list_dl > 0 or terminal.downlink_mbps is None:
+                    terminal.downlink_mbps = list_dl
                 terminal.ping_ms = float(d.get("ping") or 0.0)
                 terminal.is_alert = bool(d.get("isAlert"))
                 terminal.consumed_alarm = str(d.get("DBconsumedAlarm") or "NORMAL")
@@ -235,6 +237,8 @@ class SyncService:
                         logger.warning(f"Error fetching billing cycle for {sl_num}: {ex}")
 
                 synced_count += 1
+                if synced_count % 3 == 0:
+                    self.db.commit()
 
             self.db.commit()
             log = SyncLog(

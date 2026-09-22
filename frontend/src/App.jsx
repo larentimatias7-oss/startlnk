@@ -36,6 +36,8 @@ export default function App() {
   const [wifiModal, setWifiModal] = useState({ isOpen: false, target: null });
   const [bypassModal, setBypassModal] = useState({ isOpen: false, target: null });
 
+  const [isLiveTelemetryUpdating, setIsLiveTelemetryUpdating] = useState(false);
+
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
   };
@@ -55,12 +57,76 @@ export default function App() {
     }
   }, []);
 
+  const fetchFleetLiveTelemetry = useCallback(async () => {
+    try {
+      setIsLiveTelemetryUpdating(true);
+      const res = await fetch('/api/terminals/live-telemetry-fleet');
+      if (!res.ok) return;
+      const teleMap = await res.json();
+      if (!teleMap || Object.keys(teleMap).length === 0) return;
+
+      setData(prev => {
+        if (!prev || !prev.terminals) return prev;
+        let hasChanges = false;
+        const updatedTerminals = prev.terminals.map(t => {
+          const live = teleMap[t.device_id] || teleMap[t.id];
+          if (!live) return t;
+          if (
+            t.downlink_mbps !== live.downlink_mbps ||
+            t.uplink_mbps !== live.uplink_mbps ||
+            t.ping_ms !== live.ping_ms ||
+            t.signal_quality !== live.signal_quality ||
+            t.is_online !== live.is_online
+          ) {
+            hasChanges = true;
+            return {
+              ...t,
+              downlink_mbps: live.downlink_mbps,
+              uplink_mbps: live.uplink_mbps,
+              ping_ms: live.ping_ms ?? t.ping_ms,
+              signal_quality: live.signal_quality ?? t.signal_quality,
+              is_online: live.is_online ?? t.is_online,
+            };
+          }
+          return t;
+        });
+
+        if (!hasChanges) return prev;
+        return {
+          ...prev,
+          terminals: updatedTerminals,
+        };
+      });
+    } catch (err) {
+      console.error('Error fetching fleet live telemetry:', err);
+    } finally {
+      setIsLiveTelemetryUpdating(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchOverview();
-    // Background polling every 30s
-    const interval = setInterval(fetchOverview, 30000);
-    return () => clearInterval(interval);
-  }, [fetchOverview]);
+    // Fast initial live telemetry poll right after overview loads
+    const initialTimer = setTimeout(() => {
+      fetchFleetLiveTelemetry();
+    }, 1200);
+
+    // Fleet live telemetry polling every 12 seconds when viewing fleet
+    const liveInterval = setInterval(() => {
+      if (activeView === 'fleet') {
+        fetchFleetLiveTelemetry();
+      }
+    }, 12000);
+
+    // Overview polling (quotas, billing cycles, KPIs) every 30s
+    const overviewInterval = setInterval(fetchOverview, 30000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(liveInterval);
+      clearInterval(overviewInterval);
+    };
+  }, [fetchOverview, fetchFleetLiveTelemetry, activeView]);
 
   const handleManualSync = async () => {
     setIsSyncing(true);
@@ -68,6 +134,7 @@ export default function App() {
       const res = await fetch('/api/terminals/sync', { method: 'POST' });
       const result = await res.json();
       await fetchOverview();
+      await fetchFleetLiveTelemetry();
       showToast(result.message || 'Sincronización con TSM ECHO completada', 'success');
     } catch (err) {
       console.error('Manual sync failed:', err);
@@ -251,9 +318,15 @@ export default function App() {
                 {/* 3. Grilla de Inventario */}
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
-                    <h2 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
-                      Inventario de Enlaces Satelitales y Cuotas
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
+                        Inventario de Enlaces Satelitales y Cuotas
+                      </h2>
+                      <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#00A389]/10 text-[#00A389] border border-[#00A389]/30">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isLiveTelemetryUpdating ? 'bg-[#F39200] animate-ping' : 'bg-[#00A389] animate-pulse'}`} />
+                        {isLiveTelemetryUpdating ? 'Actualizando En Vivo...' : 'Telemetría En Vivo'}
+                      </span>
+                    </div>
                     <span className="text-xs text-[#94A3B8] font-mono">
                       {data?.terminals?.length || 0} terminales registradas
                     </span>
