@@ -1,7 +1,7 @@
 import logging
 import json
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from backend.app.models.terminal import Terminal, BillingCycle, DailyUsage, SyncLog
 from backend.app.services.echo_client import echo_client
@@ -12,9 +12,30 @@ class SyncService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _sanitize_daily_usages(self):
+        """Sanitizes legacy DailyUsage dates removing ISO time suffixes and deduplicating rows."""
+        try:
+            rows_with_t = self.db.query(DailyUsage).filter(DailyUsage.date.like("%T%")).all()
+            if rows_with_t:
+                for row in rows_with_t:
+                    clean_date = row.date.split("T")[0]
+                    duplicate = self.db.query(DailyUsage).filter(
+                        DailyUsage.billing_cycle_id == row.billing_cycle_id,
+                        DailyUsage.date == clean_date,
+                        DailyUsage.id != row.id
+                    ).first()
+                    if duplicate:
+                        self.db.delete(row)
+                    else:
+                        row.date = clean_date
+                self.db.commit()
+        except Exception as e:
+            logger.warning(f"Failed to sanitize daily usages: {e}")
+
     async def run_sync(self) -> SyncLog:
         """Synchronize terminals, telemetry, billing cycles, and daily usage from ECHO"""
         logger.info("Starting TSM ECHO synchronization worker...")
+        self._sanitize_daily_usages()
         
         # Check if we can fetch live data from ECHO
         raw_devices = []
@@ -135,12 +156,36 @@ class SyncService:
                                 or active_cycle_raw.get("DBexpirationDateUtc")
                                 or active_cycle_raw.get("endDate")
                             )
-                            b_cycle.is_active = True
-                            
-                            tot_gb = float(active_cycle_raw.get("DBtotalAmountGB") or active_cycle_raw.get("totalAmountGB") or 0.0)
-                            cons_gb = float(active_cycle_raw.get("DBconsumedAmountGB") or active_cycle_raw.get("consumedAmountGB") or 0.0)
-                            raw_pct = active_cycle_raw.get("DBconsumedPorc") or active_cycle_raw.get("consumedPercent")
-                            calc_pct = float(raw_pct) if raw_pct is not None else (round((cons_gb / tot_gb) * 100.0, 1) if tot_gb > 0 else 0.0)
+
+                            # Determine if cycle is currently active (expires in future)
+                            now_utc = datetime.now(timezone.utc)
+                            is_active = True
+                            if b_cycle.end_date:
+                                try:
+                                    clean_end = b_cycle.end_date.replace("Z", "+00:00")
+                                    e_dt = datetime.fromisoformat(clean_end)
+                                    is_active = (e_dt >= now_utc)
+                                except Exception:
+                                    is_active = True
+                            b_cycle.is_active = is_active
+
+                            # Fetch all datablocks for active cycle to aggregate true quota and top-ups
+                            datablocks = []
+                            try:
+                                datablocks = await echo_client.get_data_blocks(c_id)
+                            except Exception as d_err:
+                                logger.warning(f"Could not fetch datablocks for cycle {c_id}: {d_err}")
+
+                            sum_block_quota = sum(float(b.get("DBtotalAmountGB") or 0.0) for b in datablocks) if datablocks else 0.0
+                            sum_block_cons = sum(float(b.get("DBconsumedAmountGB") or 0.0) for b in datablocks) if datablocks else 0.0
+
+                            raw_tot = float(active_cycle_raw.get("DBtotalAmountGB") or active_cycle_raw.get("totalAmountGB") or 0.0)
+                            raw_cons = float(active_cycle_raw.get("DBconsumedAmountGB") or active_cycle_raw.get("consumedAmountGB") or 0.0)
+                            prio_gb = float(active_cycle_raw.get("totalPriorityGB") or 0.0)
+
+                            tot_gb = max(sum_block_quota, raw_tot)
+                            cons_gb = max(sum_block_cons, prio_gb, raw_cons)
+                            calc_pct = round((cons_gb / tot_gb) * 100.0, 1) if tot_gb > 0 else 0.0
 
                             b_cycle.total_amount_gb = tot_gb
                             b_cycle.consumed_amount_gb = cons_gb

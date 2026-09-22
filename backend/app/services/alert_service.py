@@ -32,48 +32,35 @@ class AlertService:
         return config
 
     @staticmethod
-    def parse_cycle_dates(start_date_str: Optional[str], end_date_str: Optional[str]) -> Tuple[Optional[int], Optional[int]]:
-        """
-        Parses cycle start and end dates.
-        Returns: (days_elapsed, days_remaining)
-        """
+    def parse_cycle_dates(start_date_str: Optional[str], end_date_str: Optional[str]) -> Tuple[int, int]:
+        """Parses cycle start/end dates. Returns: (days_elapsed, days_remaining)"""
         now = datetime.now(timezone.utc)
         today = now.date()
 
-        if not start_date_str or not end_date_str:
+        def _fallback():
             import calendar
             _, last_day = calendar.monthrange(today.year, today.month)
-            days_elapsed = max(1, today.day)
-            days_remaining = max(0, last_day - today.day)
-            return days_elapsed, days_remaining
+            return max(1, today.day), max(0, last_day - today.day)
+
+        if not start_date_str or not end_date_str:
+            return _fallback()
 
         try:
-            # Handle ISO formats like 2026-09-01T00:00:00.000Z or simple YYYY-MM-DD
             if "T" in end_date_str:
-                clean_end = end_date_str.replace("Z", "+00:00")
-                e_dt = datetime.fromisoformat(clean_end)
-                remaining_sec = (e_dt - now).total_seconds()
-                days_remaining = max(0, int(remaining_sec // 86400))
+                e_dt = datetime.fromisoformat(end_date_str.replace("Z", "+00:00"))
+                days_remaining = max(0, int((e_dt - now).total_seconds() // 86400))
             else:
-                e_date = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
-                days_remaining = max(0, (e_date - today).days)
+                days_remaining = max(0, (datetime.strptime(end_date_str[:10], "%Y-%m-%d").date() - today).days)
 
             if "T" in start_date_str:
-                clean_start = start_date_str.replace("Z", "+00:00")
-                s_dt = datetime.fromisoformat(clean_start)
-                elapsed_sec = (now - s_dt).total_seconds()
-                days_elapsed = max(1, int(elapsed_sec // 86400) + 1)
+                s_dt = datetime.fromisoformat(start_date_str.replace("Z", "+00:00"))
+                days_elapsed = max(1, int((now - s_dt).total_seconds() // 86400) + 1)
             else:
-                s_date = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
-                days_elapsed = max(1, (today - s_date).days + 1)
+                days_elapsed = max(1, (today - datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()).days + 1)
 
             return days_elapsed, days_remaining
         except Exception:
-            import calendar
-            _, last_day = calendar.monthrange(today.year, today.month)
-            days_elapsed = max(1, today.day)
-            days_remaining = max(0, last_day - today.day)
-            return days_elapsed, days_remaining
+            return _fallback()
 
     @staticmethod
     def calculate_burn_rate(
@@ -86,7 +73,6 @@ class AlertService:
         days_elapsed, days_remaining = AlertService.parse_cycle_dates(start_date_str, end_date_str)
         daily_rate = consumed_gb / days_elapsed if days_elapsed > 0 else consumed_gb
         remaining_gb = max(0.0, total_gb - consumed_gb)
-        
         projected_days = (remaining_gb / daily_rate) if daily_rate > 0 else 999.0
 
         return {
@@ -120,24 +106,16 @@ class AlertService:
         return recent_alert is not None
 
     async def evaluate_and_dispatch(self, db: Session) -> Dict[str, Any]:
-        """
-        Evaluates all terminals against alert criteria and dispatches
-        notifications to active Telegram channels.
-        """
+        """Evaluates all terminals and dispatches notifications to active Telegram channels."""
         config = self.get_or_create_config(db)
         if not config.is_enabled:
             return {"status": "SKIPPED", "message": "Alertas deshabilitadas globalmente"}
 
-        bot_token = config.telegram_bot_token
-        channels = db.query(TelegramChannel).filter(TelegramChannel.is_active == True).all()
-
-        # Fetch active channels
         channels = db.query(TelegramChannel).filter(TelegramChannel.is_active == True).all()
         if not channels:
             logger.info("Alert evaluation: No active telegram channels configured.")
             return {"status": "SKIPPED", "message": "No hay canales de Telegram activos"}
 
-        # Check for active bots or fallback config token
         from backend.app.models.terminal import TelegramBot
         active_bots = db.query(TelegramBot).filter(TelegramBot.is_active == True).all()
         fallback_token = config.telegram_bot_token
@@ -162,15 +140,16 @@ class AlertService:
                 continue
 
             cycle = active_cycles.get(t.service_line_number)
+            has_active_cycle = cycle is not None and cycle.is_active and (cycle.total_amount_gb or 0) > 0
 
-            consumed_gb = cycle.consumed_amount_gb if cycle else 0.0
-            total_gb = cycle.total_amount_gb if cycle and cycle.total_amount_gb > 0 else 1000.0
+            consumed_gb = cycle.consumed_amount_gb if has_active_cycle else 0.0
+            total_gb = cycle.total_amount_gb if has_active_cycle else 0.0
             percent = (consumed_gb / total_gb * 100.0) if total_gb > 0 else 0.0
 
             burn_metrics = self.calculate_burn_rate(
                 consumed_gb, total_gb,
-                cycle.start_date if cycle else None,
-                cycle.end_date if cycle else None
+                cycle.start_date if has_active_cycle else None,
+                cycle.end_date if has_active_cycle else None
             )
             days_remaining = burn_metrics["days_remaining"]
             daily_rate = burn_metrics["daily_rate"]
@@ -181,7 +160,7 @@ class AlertService:
             account = t.account_name or "Milicic S.A."
 
             # 1. Evaluate Fixed Quota Threshold (Critical >= 100% or Warning >= threshold)
-            if percent >= config.quota_critical_percent:
+            if has_active_cycle and percent >= config.quota_critical_percent:
                 alert_type = "QUOTA_CRITICAL"
                 if not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
                     alerts_generated += 1
@@ -198,7 +177,7 @@ class AlertService:
                         sent_count
                     )
                     alerts_sent += 1
-            elif percent >= config.quota_threshold_percent:
+            elif has_active_cycle and percent >= config.quota_threshold_percent:
                 alert_type = "QUOTA_THRESHOLD"
                 if not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
                     alerts_generated += 1
@@ -217,8 +196,11 @@ class AlertService:
                     alerts_sent += 1
 
             # 2. Evaluate Early Burn-Rate Alert
-            # Triggers if: Consumed % >= early_warning_percent AND days_remaining >= early_warning_days_remaining
-            if percent >= config.early_warning_percent and days_remaining >= config.early_warning_days_remaining:
+            # Triggers if: has_active_cycle AND Consumed % >= early_warning_percent AND days_remaining >= early_warning_days_remaining AND will_exhaust_early
+            if (has_active_cycle and
+                percent >= config.early_warning_percent and 
+                days_remaining >= config.early_warning_days_remaining and
+                burn_metrics.get("will_exhaust_early", False)):
                 alert_type = "EARLY_BURN_RATE"
                 if not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
                     alerts_generated += 1
@@ -231,7 +213,7 @@ class AlertService:
                     sent_count = await self._broadcast(db, channels, msg, fallback_token)
                     self._record_event(
                         db, t.id, nickname, sl, alert_type, "WARNING",
-                        f"Ritmo acelerado: {percent:.1f}% consumido con {days_remaining} días restantes",
+                        f"Ritmo acelerado: {percent:.1f}% consumido (agota en {projected_days:.1f}d con {days_remaining}d restantes)",
                         sent_count
                     )
                     alerts_sent += 1
@@ -339,14 +321,16 @@ class AlertService:
                 continue
 
             cycle = active_cycles.get(t.service_line_number)
-            consumed_gb = cycle.consumed_amount_gb if cycle else 0.0
-            total_gb = cycle.total_amount_gb if cycle and cycle.total_amount_gb > 0 else 1000.0
+            has_active_cycle = cycle is not None and cycle.is_active and (cycle.total_amount_gb or 0) > 0
+
+            consumed_gb = cycle.consumed_amount_gb if has_active_cycle else 0.0
+            total_gb = cycle.total_amount_gb if has_active_cycle else 0.0
             percent = (consumed_gb / total_gb * 100.0) if total_gb > 0 else 0.0
 
             burn_metrics = self.calculate_burn_rate(
                 consumed_gb, total_gb,
-                cycle.start_date if cycle else None,
-                cycle.end_date if cycle else None
+                cycle.start_date if has_active_cycle else None,
+                cycle.end_date if has_active_cycle else None
             )
             days_remaining = burn_metrics["days_remaining"]
             daily_rate = burn_metrics["daily_rate"]
@@ -357,7 +341,7 @@ class AlertService:
             account = t.account_name or "Milicic S.A."
 
             # 1. Quota alerts
-            if percent >= config.quota_critical_percent:
+            if has_active_cycle and percent >= config.quota_critical_percent:
                 msg = telegram_service.format_quota_alert(
                     nickname=nickname, service_line_number=sl, account_name=account,
                     consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
@@ -365,7 +349,7 @@ class AlertService:
                     uplink=t.uplink_mbps, ping=t.ping_ms, severity="CRITICAL"
                 )
                 active_alerts.append(("QUOTA_CRITICAL", "CRITICAL", msg, f"Cuota agotada: {consumed_gb:.1f}/{total_gb:.0f} GB ({percent:.1f}%)", t))
-            elif percent >= config.quota_threshold_percent:
+            elif has_active_cycle and percent >= config.quota_threshold_percent:
                 msg = telegram_service.format_quota_alert(
                     nickname=nickname, service_line_number=sl, account_name=account,
                     consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
@@ -374,15 +358,18 @@ class AlertService:
                 )
                 active_alerts.append(("QUOTA_THRESHOLD", "WARNING", msg, f"Umbral superado: {consumed_gb:.1f}/{total_gb:.0f} GB ({percent:.1f}%)", t))
 
-            # 2. Burn-Rate alerts
-            if percent >= config.early_warning_percent and days_remaining >= config.early_warning_days_remaining:
+            # 2. Burn-Rate alerts (requires active cycle AND will_exhaust_early)
+            if (has_active_cycle and
+                percent >= config.early_warning_percent and 
+                days_remaining >= config.early_warning_days_remaining and
+                burn_metrics.get("will_exhaust_early", False)):
                 msg = telegram_service.format_burn_rate_alert(
                     nickname=nickname, service_line_number=sl, account_name=account,
                     consumed_gb=consumed_gb, total_gb=total_gb, percent=percent,
                     days_remaining=days_remaining, daily_burn_rate=daily_rate,
                     projected_exhaustion_days=projected_days
                 )
-                active_alerts.append(("EARLY_BURN_RATE", "WARNING", msg, f"Ritmo acelerado: {percent:.1f}% con {days_remaining}d restantes", t))
+                active_alerts.append(("EARLY_BURN_RATE", "WARNING", msg, f"Ritmo acelerado: {percent:.1f}% (agota en {projected_days:.1f}d con {days_remaining}d restantes)", t))
 
             # 3. Offline alerts
             if config.alert_on_offline and not t.is_online:

@@ -40,20 +40,24 @@ def _build_summary(
                 BillingCycle.is_active == True
             ).first()
 
-    quota_total = active_cycle.total_amount_gb if active_cycle else 0.0
-    quota_consumed = active_cycle.consumed_amount_gb if active_cycle else 0.0
-    quota_percent = active_cycle.consumed_percent if active_cycle else 0.0
+    has_active_cycle = active_cycle is not None and getattr(active_cycle, "is_active", True)
+    quota_total = active_cycle.total_amount_gb if has_active_cycle else 0.0
+    quota_consumed = active_cycle.consumed_amount_gb if has_active_cycle else 0.0
+    quota_percent = active_cycle.consumed_percent if has_active_cycle else 0.0
 
-    start_date = active_cycle.start_date if active_cycle else None
-    end_date = active_cycle.end_date if active_cycle else None
+    start_date = active_cycle.start_date if has_active_cycle else None
+    end_date = active_cycle.end_date if has_active_cycle else None
     burn_metrics = AlertService.calculate_burn_rate(quota_consumed, quota_total, start_date, end_date)
     
-    # Check early burn rate alert
+    # Check early burn rate alert (strictly requires active cycle AND will_exhaust_early)
     if config is None:
         config = AlertService.get_or_create_config(db)
     is_burn_alert = (
+        has_active_cycle and
+        quota_total > 0 and
         quota_percent >= config.early_warning_percent and
-        burn_metrics["days_remaining"] >= config.early_warning_days_remaining
+        burn_metrics["days_remaining"] >= config.early_warning_days_remaining and
+        burn_metrics.get("will_exhaust_early", False)
     )
 
     return TerminalSummary(
@@ -136,8 +140,8 @@ def get_fleet_overview(db: Session = Depends(get_db)):
     total_quota_month = sum(s.quota_total_gb for s in summaries)
     fleet_quota_pct = round((total_consumed_month / total_quota_month * 100.0), 1) if total_quota_month > 0 else 0.0
 
-    warning_count = sum(1 for s in summaries if 80.0 <= s.quota_consumed_percent < 100.0)
-    critical_count = sum(1 for s in summaries if s.quota_consumed_percent >= 100.0)
+    warning_count = sum(1 for s in summaries if cfg.quota_threshold_percent <= s.quota_consumed_percent < cfg.quota_critical_percent)
+    critical_count = sum(1 for s in summaries if s.quota_consumed_percent >= cfg.quota_critical_percent)
 
     # Last sync
     last_log = db.query(SyncLog).order_by(SyncLog.timestamp.desc()).first()
@@ -156,14 +160,16 @@ def get_fleet_overview(db: Session = Depends(get_db)):
         sync_status=last_log.status if last_log else "UNKNOWN"
     )
 
-    # Fleet daily trend aggregated across all terminals
+    # Fleet daily trend aggregated across all terminals (last 30 days chronological)
     daily_sums = db.query(
         DailyUsage.date,
         func.sum(DailyUsage.total_gb).label("total_gb"),
         func.sum(DailyUsage.priority_gb).label("priority_gb"),
         func.sum(DailyUsage.opt_in_priority_gb).label("opt_in_priority_gb"),
         func.sum(DailyUsage.standard_gb).label("standard_gb")
-    ).group_by(DailyUsage.date).order_by(DailyUsage.date.asc()).limit(30).all()
+    ).group_by(DailyUsage.date).order_by(DailyUsage.date.desc()).limit(30).all()
+
+    daily_sums = list(reversed(daily_sums))
 
     fleet_trend = [
         FleetDailyUsage(
@@ -201,6 +207,10 @@ def get_terminal_detail(device_id: str, db: Session = Depends(get_db)):
             BillingCycle.service_line_number == t.service_line_number,
             BillingCycle.is_active == True
         ).first()
+        if not cycle:
+            cycle = db.query(BillingCycle).filter(
+                BillingCycle.service_line_number == t.service_line_number
+            ).order_by(BillingCycle.id.desc()).first()
         if cycle:
             b_cycle_schema = BillingCycleSchema(
                 id=cycle.id,
@@ -246,6 +256,10 @@ def get_usage_history(device_id: str, db: Session = Depends(get_db)):
         BillingCycle.service_line_number == sl,
         BillingCycle.is_active == True
     ).first()
+    if not active_cycle:
+        active_cycle = db.query(BillingCycle).filter(
+            BillingCycle.service_line_number == sl
+        ).order_by(BillingCycle.id.desc()).first()
 
     c_id = active_cycle.id if active_cycle else None
 
