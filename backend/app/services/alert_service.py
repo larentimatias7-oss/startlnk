@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -23,6 +23,7 @@ class AlertService:
                 early_warning_days_remaining=15,
                 alert_on_offline=False,
                 cooldown_hours=12,
+                sync_interval_minutes=15,
                 is_enabled=True
             )
             db.add(config)
@@ -36,21 +37,43 @@ class AlertService:
         Parses cycle start and end dates.
         Returns: (days_elapsed, days_remaining)
         """
+        now = datetime.now(timezone.utc)
+        today = now.date()
+
         if not start_date_str or not end_date_str:
-            # Fallback: assume typical 30 day cycle
-            return 15, 15
+            import calendar
+            _, last_day = calendar.monthrange(today.year, today.month)
+            days_elapsed = max(1, today.day)
+            days_remaining = max(0, last_day - today.day)
+            return days_elapsed, days_remaining
 
         try:
-            # Format can be YYYY-MM-DD or ISO
-            s_date = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
-            e_date = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
-            today = datetime.utcnow().date()
+            # Handle ISO formats like 2026-09-01T00:00:00.000Z or simple YYYY-MM-DD
+            if "T" in end_date_str:
+                clean_end = end_date_str.replace("Z", "+00:00")
+                e_dt = datetime.fromisoformat(clean_end)
+                remaining_sec = (e_dt - now).total_seconds()
+                days_remaining = max(0, int(remaining_sec // 86400))
+            else:
+                e_date = datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
+                days_remaining = max(0, (e_date - today).days)
 
-            days_elapsed = max(1, (today - s_date).days)
-            days_remaining = max(0, (e_date - today).days)
+            if "T" in start_date_str:
+                clean_start = start_date_str.replace("Z", "+00:00")
+                s_dt = datetime.fromisoformat(clean_start)
+                elapsed_sec = (now - s_dt).total_seconds()
+                days_elapsed = max(1, int(elapsed_sec // 86400) + 1)
+            else:
+                s_date = datetime.strptime(start_date_str[:10], "%Y-%m-%d").date()
+                days_elapsed = max(1, (today - s_date).days + 1)
+
             return days_elapsed, days_remaining
         except Exception:
-            return 15, 15
+            import calendar
+            _, last_day = calendar.monthrange(today.year, today.month)
+            days_elapsed = max(1, today.day)
+            days_remaining = max(0, last_day - today.day)
+            return days_elapsed, days_remaining
 
     @staticmethod
     def calculate_burn_rate(

@@ -125,8 +125,17 @@ class SyncService:
                                 b_cycle = BillingCycle(id=c_id, service_line_number=sl_num)
                                 self.db.add(b_cycle)
 
-                            b_cycle.start_date = active_cycle_raw.get("startDate")
-                            b_cycle.end_date = active_cycle_raw.get("endDate")
+                            b_cycle.start_date = (
+                                active_cycle_raw.get("cycleStartDate")
+                                or active_cycle_raw.get("DBstartDateUtc")
+                                or active_cycle_raw.get("startDate")
+                            )
+                            b_cycle.end_date = (
+                                active_cycle_raw.get("cycleEndDate")
+                                or active_cycle_raw.get("DBexpirationDateUtc")
+                                or active_cycle_raw.get("endDate")
+                            )
+                            b_cycle.is_active = True
                             
                             tot_gb = float(active_cycle_raw.get("DBtotalAmountGB") or active_cycle_raw.get("totalAmountGB") or 0.0)
                             cons_gb = float(active_cycle_raw.get("DBconsumedAmountGB") or active_cycle_raw.get("consumedAmountGB") or 0.0)

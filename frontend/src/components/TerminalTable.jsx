@@ -372,7 +372,7 @@ export default function TerminalTable({
                       {/* Cycle Remaining Days & Daily Average */}
                       <div className="flex items-center justify-between text-[10px] text-[#64748B] mt-1 font-mono">
                         <span>
-                          ⏳ Restan: <strong className="text-[#CBD5E1]">{t.days_remaining != null ? t.days_remaining : 15}d</strong>
+                          ⏳ Restan: <strong className="text-[#CBD5E1]">{t.days_remaining != null ? t.days_remaining : 0}d</strong>
                         </span>
                         <span>
                           Ritmo: <strong className="text-[#CBD5E1]">~{t.daily_avg_gb != null ? t.daily_avg_gb.toFixed(1) : 0} GB/d</strong>
