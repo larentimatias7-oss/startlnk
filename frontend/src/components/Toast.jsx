@@ -16,7 +16,7 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
 
   if (!message) return null;
 
-  const styles = {
+  const STYLE_MAP = {
     success: {
       bg: 'bg-[#141B22]',
       border: 'border-[#38A169]/40',
@@ -49,15 +49,16 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
       iconText: 'text-[#3182CE]',
       Icon: Info,
     }
-  }[type] || styles.info;
+  };
 
-  const { Icon } = styles;
+  const currentStyle = STYLE_MAP[type] || STYLE_MAP.info;
+  const { Icon } = currentStyle;
 
   return (
     <div className="fixed top-5 right-5 z-50 animate-slideInRight max-w-md w-full px-4 sm:px-0">
-      <div className={`${styles.bg} border ${styles.border} shadow-2xl rounded-lg p-3.5 flex items-start justify-between gap-3 backdrop-blur-md`}>
+      <div className={`${currentStyle.bg} border ${currentStyle.border} shadow-2xl rounded-lg p-3.5 flex items-start justify-between gap-3 backdrop-blur-md`}>
         <div className="flex items-start gap-2.5">
-          <div className={`p-1.5 rounded-md ${styles.badgeBg} ${styles.iconText} shrink-0 mt-0.5`}>
+          <div className={`p-1.5 rounded-md ${currentStyle.badgeBg} ${currentStyle.iconText} shrink-0 mt-0.5`}>
             <Icon className="w-4 h-4" />
           </div>
           <div className="text-xs">

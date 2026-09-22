@@ -92,8 +92,18 @@ export default function AlertConfigView({ onNotify, isEmbedded = false }) {
       const data = await res.json();
       if (res.ok && data.success) {
         setVerifiedBotInfo(data);
+        // Guardar automáticamente el token validado en la base de datos
+        try {
+          await fetch('/api/alerts/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...config, telegram_bot_token: tokenToCheck.trim() })
+          });
+        } catch (saveErr) {
+          console.error('Error al autoguardar token:', saveErr);
+        }
         if (notifyUser && onNotify) {
-          onNotify(`✅ Bot verificado: @${data.bot_username} (${data.bot_name})`, 'success');
+          onNotify(`✅ Bot verificado y conectado: @${data.bot_username} (${data.bot_name})`, 'success');
         }
       } else {
         setVerifiedBotInfo(null);
