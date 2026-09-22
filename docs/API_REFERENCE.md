@@ -1,6 +1,6 @@
 # Referencia de la API Interna (FastAPI)
 
-Esta especificación documenta exhaustivamente los endpoints REST expuestos por el backend de **TSM Starlink Fleet & Usage Monitor**.
+Esta especificación documenta exhaustivamente los endpoints REST expuestos por el backend de **TSM Starlink Fleet & Usage Monitor (Milicic / TSM Patagonia)**.
 
 ---
 
@@ -16,13 +16,18 @@ Esta especificación documenta exhaustivamente los endpoints REST expuestos por 
 | `GET` | [`/api/terminals/{id}/usage-history`](#6-get-apiterminalsidusage-history) | Consumo | Historial de tráfico diario estructurado para gráficos |
 | `POST` | [`/api/terminals/{id}/reboot`](#7-post-apiterminalsidreboot) | Control | Disparo de reinicio remoto de la antena vía Starlink Backoffice |
 | `POST` | [`/api/terminals/{sl}/opt-in`](#8-post-apiterminalsslopt-in) | Control | Conmutación de política de sobreconsumo prioritario (*Opt-In*) |
-| `POST` | [`/api/terminals/sync`](#9-post-apiterminalssync) | Ingesta | Ejecución forzada e inmediata de sincronización con TSM ECHO |
-| `GET/PUT` | [`/api/alerts/config`](#10-configuración-de-alertas-y-telegram) | Alertas | Consulta y actualización de umbrales y Telegram Bot Token |
-| `GET/POST`| [`/api/alerts/channels`](#10-configuración-de-alertas-y-telegram) | Alertas | Gestión de canales y grupos de Telegram destinatarios |
-| `POST` | [`/api/alerts/test-telegram`](#10-configuración-de-alertas-y-telegram) | Alertas | Envío de mensaje de verificación a canales de Telegram |
-| `GET` | [`/api/alerts/history`](#10-configuración-de-alertas-y-telegram) | Alertas | Bitácora de incidentes y alertas despachadas |
-| `POST` | [`/api/alerts/evaluate`](#10-configuración-de-alertas-y-telegram) | Alertas | Disparo manual de evaluación de alertas sobre la flota |
-
+| `POST` | [`/api/terminals/{id}/toggle-alerts`](#9-post-apiterminalsidtoggle-alerts) | Control | Activa o silencia individualmente las alertas para un terminal |
+| `POST` | [`/api/terminals/sync`](#10-post-apiterminalssync) | Ingesta | Ejecución forzada e inmediata de sincronización con TSM ECHO |
+| `GET/PUT` | [`/api/alerts/config`](#11-configuración-de-alertas-y-cadencia) | Alertas | Consulta y actualización de umbrales, cadencia y cooldown |
+| `GET/POST`| [`/api/alerts/bots`](#12-gestión-multibot-de-telegram) | Telegram | Listado y registro de múltiples bots de Telegram con verificación |
+| `PUT/DELETE`| [`/api/alerts/bots/{id}`](#12-gestión-multibot-de-telegram) | Telegram | Modificación y eliminación de bots de Telegram |
+| `POST` | [`/api/alerts/verify-bot`](#12-gestión-multibot-de-telegram) | Telegram | Valida la conectividad de un token contra la API de Telegram |
+| `GET/POST`| [`/api/alerts/channels`](#13-canales-y-grupos-destinatarios) | Alertas | Gestión de canales y asignación de bots emisores específicos |
+| `PUT/DELETE`| [`/api/alerts/channels/{id}`](#13-canales-y-grupos-destinatarios) | Alertas | Modificación de bot emisor, estado (activo/pausado) o baja de canal |
+| `POST` | [`/api/alerts/test-telegram`](#14-pruebas-de-canales) | Alertas | Envía un mensaje de prueba de conectividad a un canal |
+| `POST` | [`/api/alerts/channels/{id}/test-real-alerts`](#14-pruebas-de-canales) | Alertas | **Evalúa la flota en vivo y despacha las alertas vigentes al canal** |
+| `GET` | [`/api/alerts/history`](#15-auditoría-y-evaluación) | Alertas | Bitácora persistida de incidentes y notificaciones despachadas |
+| `POST` | [`/api/alerts/evaluate`](#15-auditoría-y-evaluación) | Alertas | Disparo manual de evaluación de alertas sobre la flota |
 
 ---
 
@@ -42,12 +47,12 @@ Verifica la disponibilidad operativa del backend, la conectividad con la base de
   "status": "online",
   "service": "TSM Starlink Fleet & Usage Monitor",
   "version": "1.0.0",
-  "timestamp": "2026-09-21T20:30:15.124567",
+  "timestamp": "2026-09-22T14:30:15.124567",
   "database_connected": true,
   "echo_credentials_configured": true,
   "scheduler_running": true,
   "last_sync": {
-    "timestamp": "2026-09-21T20:15:00.000000",
+    "timestamp": "2026-09-22T14:15:00.000000",
     "status": "SUCCESS",
     "terminals": 13,
     "message": "Synced 13 terminals successfully from TSM ECHO"
@@ -72,14 +77,7 @@ Retorna la bitácora histórica de las últimas 20 ejecuciones del worker de ing
 [
   {
     "id": 42,
-    "timestamp": "2026-09-21T20:15:00",
-    "status": "SUCCESS",
-    "terminals_count": 13,
-    "message": "Synced 13 terminals successfully from TSM ECHO"
-  },
-  {
-    "id": 41,
-    "timestamp": "2026-09-21T20:00:00",
+    "timestamp": "2026-09-22T14:15:00",
     "status": "SUCCESS",
     "terminals_count": 13,
     "message": "Synced 13 terminals successfully from TSM ECHO"
@@ -96,242 +94,59 @@ Retorna la vista consolidada para renderizar el panel principal del dashboard: m
 - **Método**: `GET`
 - **Ruta**: `/api/terminals/overview`
 - **Códigos de Respuesta**:
-  * `200 OK`: Datos consolidados de flota.
+  * `200 OK`: Datos consolidados de flota (`FleetOverviewResponse`).
 
-### Esquema de la Respuesta:
-- `kpis` (*Object*):
-  * `total_terminals` (*int*): Total de terminales registradas.
-  * `online_count` (*int*): Terminales activas y conectadas.
-  * `offline_count` (*int*): Terminales sin enlace satelital.
-  * `availability_percent` (*float*): Porcentaje de disponibilidad general.
-  * `total_consumed_month_gb` (*float*): Sumatoria de GB consumidos en el mes vigente.
-  * `total_quota_month_gb` (*float*): Sumatoria de GB contratados de la flota.
-  * `fleet_quota_consumed_percent` (*float*): Porcentaje de uso global de la cuota.
-  * `terminals_in_warning` (*int*): Enlaces entre 80% y 99.9% de su cuota.
-  * `terminals_in_critical` (*int*): Enlaces que han alcanzado o superado el 100%.
-  * `last_sync_time` (*string / ISO-8601*): Fecha y hora de la última sincronización.
-  * `sync_status` (*string*): `SUCCESS`, `WARNING` o `ERROR`.
-- `fleet_daily_trend` (*Array<Object>*): Registros diarios consolidados (últimos 30 días):
-  * `date` (*string*): Fecha en formato `YYYY-MM-DD`.
-  * `total_gb` (*float*): Tráfico total diario en GB.
-  * `priority_gb` (*float*): Tráfico prioritario.
-  * `opt_in_priority_gb` (*float*): Tráfico prioritario excedente con cargo.
-  * `standard_gb` (*float*): Tráfico estándar.
-- `terminals` (*Array<Object>*): Lista de resúmenes de cada terminal (`TerminalSummary`).
-
-### Ejemplo de Respuesta:
-```json
-{
-  "kpis": {
-    "total_terminals": 13,
-    "online_count": 12,
-    "offline_count": 1,
-    "availability_percent": 92.3,
-    "total_consumed_month_gb": 11068.34,
-    "total_quota_month_gb": 15700.0,
-    "fleet_quota_consumed_percent": 70.5,
-    "terminals_in_warning": 2,
-    "terminals_in_critical": 1,
-    "last_sync_time": "2026-09-21T20:15:00",
-    "sync_status": "SUCCESS"
-  },
-  "fleet_daily_trend": [
-    {
-      "date": "2026-09-01",
-      "total_gb": 348.25,
-      "priority_gb": 320.10,
-      "opt_in_priority_gb": 0.0,
-      "standard_gb": 28.15
-    },
-    {
-      "date": "2026-09-02",
-      "total_gb": 412.80,
-      "priority_gb": 380.40,
-      "opt_in_priority_gb": 12.50,
-      "standard_gb": 19.90
-    }
-  ],
-  "terminals": [
-    {
-      "id": "ut01000000-00000000-00000001",
-      "device_id": "ut01000000-00000000-00000001",
-      "nickname": "Pozo Loma Negra #14",
-      "kit_serial": "KIT00492001",
-      "service_line_number": "SL-384910-48201-92",
-      "account_name": "Milicic S.A.",
-      "is_online": true,
-      "downlink_mbps": 184.2,
-      "uplink_mbps": 24.8,
-      "ping_ms": 41.5,
-      "drop_rate": 0.0012,
-      "signal_quality": 98.0,
-      "has_public_ip": true,
-      "is_alert": false,
-      "consumed_alarm": "NORMAL",
-      "active_cycle_id": 4801,
-      "quota_total_gb": 1000.0,
-      "quota_consumed_gb": 742.8,
-      "quota_consumed_percent": 74.3,
-      "updated_at": "2026-09-21T20:15:05"
-    }
-  ]
-}
-```
+### Estructura de Respuesta:
+- `kpis`: Métricas agregadas (total terminales, online, offline, consumo del mes en GB, cuota total, porcentaje medio de cuota, alertas activas).
+- `trend`: Array de 30 puntos diarios para el gráfico de área apilado (`date`, `priority_gb`, `standard_gb`, `total_gb`).
+- `terminals`: Listado completo de terminales con estado, telemetría y ciclo de facturación activo.
 
 ---
 
 ## 4. `GET /api/terminals`
 
-Retorna la lista de terminales registradas, permitiendo filtrado dinámico por estado de conectividad y búsqueda por texto.
+Lista las terminales satelitales registradas con capacidad de filtrado reactivo.
 
 - **Método**: `GET`
 - **Ruta**: `/api/terminals`
 - **Parámetros de Consulta (Query Params)**:
-  * `status` (*string*, opcional): Filtra por estado de enlace. Valores soportados: `online` o `offline`.
-  * `search` (*string*, opcional): Coincidencia parcial insensible a mayúsculas sobre `nickname`, `kit_serial`, `service_line_number` o `account_name`.
-- **Códigos de Respuesta**:
-  * `200 OK`: Lista de objetos `TerminalSummary`.
-
-### Ejemplo de Petición:
-```http
-GET /api/terminals?status=online&search=Loma%20Negra HTTP/1.1
-Host: localhost:8000
-Accept: application/json
-```
+  * `status` (*string*, opcional): Filtra por estado (`online` o `offline`).
+  * `search` (*string*, opcional): Búsqueda textual insensible a mayúsculas sobre `nickname`, `kit_serial`, `service_line_number` y `account_name`.
 
 ---
 
 ## 5. `GET /api/terminals/{id}`
 
-Retorna la información técnica exhaustiva de un enlace satelital, incluyendo parámetros de hardware, router Wi-Fi, telemetría física de radiofrecuencia (RF) y el ciclo de facturación activo.
+Obtiene la ficha técnica completa y la telemetría en tiempo real de una antena específica.
 
 - **Método**: `GET`
-- **Ruta**: `/api/terminals/{device_id}`
+- **Ruta**: `/api/terminals/{id}`
 - **Parámetros de Ruta**:
-  * `device_id` (*string*, requerido): Identificador del dispositivo con prefijo `ut` (ej: `ut01000000-...`), sin prefijo o `id` de base de datos.
-- **Códigos de Respuesta**:
-  * `200 OK`: Ficha técnica completa del terminal (`TerminalDetail`).
-  * `404 Not Found`: No existe ningún terminal con el identificador proporcionado.
-
-### Ejemplo de Respuesta:
-```json
-{
-  "id": "ut01000000-00000000-00000001",
-  "device_id": "ut01000000-00000000-00000001",
-  "raw_device_id": "01000000-00000000-00000001",
-  "nickname": "Pozo Loma Negra #14",
-  "kit_serial": "KIT00492001",
-  "service_line_number": "SL-384910-48201-92",
-  "account_name": "Milicic S.A.",
-  "is_online": true,
-  "downlink_mbps": 184.2,
-  "uplink_mbps": 24.8,
-  "ping_ms": 41.5,
-  "drop_rate": 0.0012,
-  "signal_quality": 98.0,
-  "has_public_ip": true,
-  "is_alert": false,
-  "consumed_alarm": "NORMAL",
-  "active_cycle_id": 4801,
-  "quota_total_gb": 1000.0,
-  "quota_consumed_gb": 742.8,
-  "quota_consumed_percent": 74.3,
-  "updated_at": "2026-09-21T20:15:05",
-  "dish_model": "Flat High Performance",
-  "dish_serial": "DISH-0098001",
-  "router_id": "RTR-0001",
-  "wifi_bypassed": false,
-  "obstruction_percent": 0.0,
-  "uptime_seconds": 1234567,
-  "latitude": -38.9516,
-  "longitude": -68.0591,
-  "h3_cell_id": "599573887498223615",
-  "billing_cycle": {
-    "id": 4801,
-    "service_line_number": "SL-384910-48201-92",
-    "start_date": "2026-09-01T00:00:00.000Z",
-    "end_date": "2026-09-30T23:59:59.000Z",
-    "total_amount_gb": 1000.0,
-    "consumed_amount_gb": 742.8,
-    "consumed_percent": 74.3,
-    "consumed_alarm": "NORMAL",
-    "consumed_status": "ACTIVE",
-    "is_active": true
-  }
-}
-```
+  * `id` (*string*, requerido): Identificador de la terminal (`device_id` o ID interno).
 
 ---
 
 ## 6. `GET /api/terminals/{id}/usage-history`
 
-Retorna la serie cronológica diaria de consumo para el ciclo de facturación activo del terminal, desglosado en las categorías de tráfico de Starlink requeridas para renderizado de gráficos.
+Historial diario estructurado de consumo de datos para el terminal durante el ciclo de facturación actual o histórico.
 
 - **Método**: `GET`
 - **Ruta**: `/api/terminals/{device_id}/usage-history`
 - **Parámetros de Ruta**:
   * `device_id` (*string*, requerido): Identificador del terminal.
-- **Códigos de Respuesta**:
-  * `200 OK`: Historial de consumo (`UsageHistoryResponse`).
-  * `404 Not Found`: Terminal no encontrado.
-
-### Ejemplo de Respuesta:
-```json
-{
-  "device_id": "ut01000000-00000000-00000001",
-  "service_line_number": "SL-384910-48201-92",
-  "cycle_id": 4801,
-  "total_priority_gb": 710.20,
-  "total_opt_in_gb": 0.0,
-  "total_standard_gb": 28.50,
-  "total_consumed_gb": 742.80,
-  "daily_usages": [
-    {
-      "date": "2026-09-01",
-      "priority_gb": 32.40,
-      "opt_in_priority_gb": 0.0,
-      "standard_gb": 1.20,
-      "non_bill_gb": 0.35,
-      "total_gb": 33.95
-    },
-    {
-      "date": "2026-09-02",
-      "priority_gb": 41.10,
-      "opt_in_priority_gb": 0.0,
-      "standard_gb": 2.10,
-      "non_bill_gb": 0.40,
-      "total_gb": 43.60
-    }
-  ]
-}
-```
 
 ---
 
 ## 7. `POST /api/terminals/{id}/reboot`
 
-Envía una orden de reinicio remoto hacia la antena satelital Starlink a través de los endpoints de backoffice de TSM ECHO (`/backoffice/starlink/user-terminals/{id}/reboot`).
+Envía una orden de reinicio remoto hacia la antena satelital Starlink a través del backoffice de TSM ECHO (`/backoffice/starlink/user-terminals/{id}/reboot`).
 
 > [!WARNING]
-> Esta operación reiniciará el hardware del terminal satelital e interrumpirá la conectividad de red durante aproximadamente 2 a 4 minutos mientras se reorientan los haces de RF.
+> Esta operación reiniciará el hardware del terminal e interrumpirá la conectividad de red durante aproximadamente 2 a 4 minutos.
 
 - **Método**: `POST`
 - **Ruta**: `/api/terminals/{device_id}/reboot`
-- **Cuerpo de Petición (Body)**: Vacío (`{}`).
-- **Códigos de Respuesta**:
-  * `200 OK`: Orden procesada o encolada con éxito (`ActionResponse`).
-  * `404 Not Found`: Terminal no encontrado.
-
-### Ejemplo de Respuesta:
-```json
-{
-  "success": true,
-  "message": "Reboot instruction dispatched to Starlink terminal Pozo Loma Negra #14",
-  "action": "reboot",
-  "target": "ut01000000-00000000-00000001",
-  "timestamp": "2026-09-21T20:31:00.123456"
-}
-```
+- **Cuerpo de Petición**: Vacío (`{}`).
 
 ---
 
@@ -341,118 +156,199 @@ Conmuta la política de sobreconsumo prioritario de una línea de servicio Starl
 
 - **Método**: `POST`
 - **Ruta**: `/api/terminals/{service_line_number}/opt-in`
-- **Parámetros de Ruta**:
-  * `service_line_number` (*string*, requerido): Número de línea de servicio (ej: `SL-384910-48201-92`).
 - **Parámetros de Consulta (Query Params)**:
-  * `enabled` (*bool*, opcional, por defecto `true`): `true` para activar Opt-In; `false` para desactivar (Opt-Out).
-- **Códigos de Respuesta**:
-  * `200 OK`: Política modificada exitosamente (`ActionResponse`).
-  * `404 Not Found`: Línea de servicio no encontrada.
+  * `enabled` (*bool*, opcional, por defecto `true`): `true` para activar Opt-In; `false` para desactivar.
 
-### Ejemplo de Petición:
-```http
-POST /api/terminals/SL-384910-48201-92/opt-in?enabled=true HTTP/1.1
-Host: localhost:8000
-Content-Length: 0
-```
+---
+
+## 9. `POST /api/terminals/{id}/toggle-alerts`
+
+Permite silenciar o reactivar de forma individual la generación de alertas para un enlace satelital específico. Esto previene la fatiga de alertas durante ventanas de mantenimiento programado o traslados de antena.
+
+- **Método**: `POST`
+- **Ruta**: `/api/terminals/{id}/toggle-alerts`
+- **Parámetros de Ruta**:
+  * `id` (*string*, requerido): Identificador del terminal (`device_id` o ID interno).
+- **Códigos de Respuesta**:
+  * `200 OK`: Estado actualizado (`ToggleAlertsResponse`).
 
 ### Ejemplo de Respuesta:
 ```json
 {
-  "success": true,
-  "message": "Data Opt-In set to True for SL-384910-48201-92",
-  "action": "opt-in",
-  "target": "SL-384910-48201-92",
-  "timestamp": "2026-09-21T20:31:30.987654"
+  "terminal_id": "1120901c-0312800e-9ad16181",
+  "alerts_enabled": false,
+  "message": "Alertas desactivadas para 'Pozo Loma Negra #14'"
 }
 ```
 
 ---
 
-## 9. `POST /api/terminals/sync`
+## 10. `POST /api/terminals/sync`
 
 Dispara de forma asíncrona una sincronización forzada e inmediata contra TSM ECHO sin esperar al siguiente ciclo del planificador.
 
 - **Método**: `POST`
 - **Ruta**: `/api/terminals/sync`
-- **Cuerpo de Petición**: Vacío.
 - **Códigos de Respuesta**:
   * `200 OK`: Sincronización concluida (`ActionResponse`).
 
-### Ejemplo de Respuesta:
-```json
-{
-  "success": true,
-  "message": "Synced 13 terminals successfully from TSM ECHO",
-  "action": "manual_sync",
-  "target": "13 terminals",
-  "timestamp": "2026-09-21T20:32:00.000000"
-}
-```
-
 ---
 
-## 10. Configuración de Alertas y Telegram
+## 11. Configuración de Alertas y Cadencia
 
-### 10.1 `GET /api/alerts/config`
-Obtiene la configuración activa del motor de alertas (umbrales de cuota, parámetros de ritmo acelerado burn-rate, cooldown y token de bot).
+### 11.1 `GET /api/alerts/config`
+Obtiene la configuración activa del motor de alertas (umbrales de cuota, ritmo de burn-rate, cadencia de monitoreo y cooldown).
 
 #### Ejemplo de Respuesta:
 ```json
 {
   "id": 1,
-  "telegram_bot_token": "123456:ABC-DEF1234ghIkl-zyx",
+  "telegram_bot_token": "8899338410:AAHP...",
   "quota_threshold_percent": 80.0,
   "quota_critical_percent": 100.0,
   "early_warning_percent": 60.0,
   "early_warning_days_remaining": 15,
   "alert_on_offline": false,
   "cooldown_hours": 12,
+  "sync_interval_minutes": 15,
   "is_enabled": true,
-  "updated_at": "2026-09-22T09:15:00.000000"
+  "updated_at": "2026-09-22T14:15:00.000000"
 }
 ```
 
-### 10.2 `PUT /api/alerts/config`
-Actualiza parcialmente o en su totalidad los parámetros de alerta y el token del bot de Telegram.
+### 11.2 `PUT /api/alerts/config`
+Actualiza los umbrales de alerta y ajusta dinámicamente la cadencia del worker en segundo plano sin requerir reiniciar la aplicación.
 
 #### Payload de Ejemplo:
 ```json
 {
-  "telegram_bot_token": "123456:ABC-DEF1234ghIkl-zyx",
-  "quota_threshold_percent": 85.0,
-  "early_warning_percent": 65.0,
-  "early_warning_days_remaining": 12,
-  "cooldown_hours": 24
+  "quota_threshold_percent": 80.0,
+  "quota_critical_percent": 100.0,
+  "early_warning_percent": 60.0,
+  "early_warning_days_remaining": 15,
+  "alert_on_offline": false,
+  "cooldown_hours": 12,
+  "sync_interval_minutes": 10,
+  "is_enabled": true
 }
 ```
 
-### 10.3 `GET /api/alerts/channels` & `POST /api/alerts/channels`
-Permite listar y registrar canales o grupos de Telegram destinatarios de las alertas.
+---
 
-#### Payload para Crear Canal (`POST`):
+## 12. Gestión Multi-Bot de Telegram
+
+Permite registrar múltiples bots de Telegram corporativos (ej. `@inframilicic_bot`, `@guardia_noc_bot`), validar sus credenciales automáticamente con Telegram y asignarlos independientemente a los canales de guardia.
+
+### 12.1 `GET /api/alerts/bots`
+Lista todos los bots registrados, enmascarando los tokens para resguardo de seguridad.
+
+#### Ejemplo de Respuesta:
+```json
+[
+  {
+    "id": 1,
+    "name": "Alertas Infra MILICIC",
+    "token_masked": "8899338410:AAHP...b_c8",
+    "bot_username": "inframilicic_bot",
+    "bot_id": "8899338410",
+    "is_default": true,
+    "is_active": true,
+    "channels_count": 3,
+    "created_at": "2026-09-22T13:45:00.000000"
+  }
+]
+```
+
+### 12.2 `POST /api/alerts/bots`
+Registra un nuevo bot de Telegram. Valida el token directamente con `getMe` de Telegram antes de guardarlo.
+
+#### Payload:
 ```json
 {
-  "name": "Guardia NOC Milicic",
-  "chat_id": "-100192837482",
+  "name": "NOC Minería Bot",
+  "token": "8899338410:AAHPzP7vX76k0UvJ04xQjJk1l2m3",
+  "is_default": false,
   "is_active": true
 }
 ```
 
-### 10.4 `POST /api/alerts/test-telegram`
-Envía un mensaje de prueba con formato HTML para validar de forma instantánea que el Bot Token es válido y que el bot tiene permisos para enviar mensajes en el Chat ID seleccionado.
+### 12.3 `PUT /api/alerts/bots/{bot_id}`
+Modifica el nombre, estado o marca como default un bot existente.
 
-#### Payload de Prueba:
+### 12.4 `DELETE /api/alerts/bots/{bot_id}`
+Elimina un bot. Los canales vinculados a este bot conmutarán automáticamente al bot predeterminado.
+
+### 12.5 `POST /api/alerts/verify-bot`
+Verifica un token de bot contra Telegram API sin persistirlo.
+
+---
+
+## 13. Canales y Grupos Destinatarios
+
+### 13.1 `GET /api/alerts/channels`
+Lista todos los canales o grupos registrados, indicando el bot emisor asignado (`bot_id`, `bot_name`, `bot_username`).
+
+### 13.2 `POST /api/alerts/channels`
+Registra un nuevo canal o grupo de Telegram y lo vincula al bot deseado.
+
+#### Payload:
 ```json
 {
-  "chat_id": "-100192837482",
-  "custom_bot_token": null
+  "name": "Guardia NOC Minería",
+  "chat_id": "-1004383937012",
+  "bot_id": 1,
+  "is_active": true
 }
 ```
 
-### 10.5 `GET /api/alerts/history`
-Retorna la bitácora de las últimas 50 alertas evaluadas y despachadas, indicando terminal, severidad (`WARNING`, `CRITICAL`), mensaje, regla activada y cantidad de canales notificados.
+### 13.3 `PUT /api/alerts/channels/{channel_id}`
+Permite pausar o reactivar un canal (`is_active: false/true`) o reasignar su bot emisor al vuelo.
 
-### 10.6 `POST /api/alerts/evaluate`
-Dispara de inmediato y bajo demanda la evaluación algorítmica de toda la flota contra las reglas de cuota fija y ritmo acelerado (burn-rate), enviando las notificaciones correspondientes a los canales activos que no se encuentren en período de cooldown anti-spam.
+### 13.4 `DELETE /api/alerts/channels/{channel_id}`
+Elimina el canal de la lista de destinatarios.
 
+---
+
+## 14. Pruebas de Canales
+
+### 14.1 `POST /api/alerts/test-telegram`
+Envía un mensaje sintético de prueba de conectividad para certificar que el bot tiene acceso de escritura al `chat_id`.
+
+#### Payload:
+```json
+{
+  "chat_id": "-1004383937012",
+  "bot_id": 1
+}
+```
+
+### 14.2 `POST /api/alerts/channels/{channel_id}/test-real-alerts`
+**Prueba integral con datos reales de flota**: Evalúa en vivo todas las antenas activas contra las reglas de alerta y despacha inmediatamente todas las alertas vigentes al canal indicado, omitiendo el cooldown anti-spam.
+
+- **Método**: `POST`
+- **Ruta**: `/api/alerts/channels/{channel_id}/test-real-alerts`
+- **Comportamiento**:
+  - Si hay alertas vigentes: Envía un banner de encabezado + cada alerta real formateada con sus métricas de consumo y las registra en auditoría.
+  - Si la flota está saludable: Envía un reporte formal confirmando 0 alertas activas sobre la flota total.
+
+#### Ejemplo de Respuesta:
+```json
+{
+  "success": true,
+  "alerts_count": 9,
+  "sent_count": 9,
+  "channel_name": "Alertas Infra MIO",
+  "bot_username": "inframilicic_bot",
+  "message": "Se despacharon 9 de 9 alertas vigentes al canal 'Alertas Infra MIO' vía @inframilicic_bot"
+}
+```
+
+---
+
+## 15. Auditoría y Evaluación
+
+### 15.1 `GET /api/alerts/history`
+Retorna el registro histórico de las últimas 50 alertas evaluadas y despachadas, con terminal, severidad (`WARNING`, `CRITICAL`), mensaje, canales notificados y timestamp.
+
+### 15.2 `POST /api/alerts/evaluate`
+Dispara de forma manual e inmediata la evaluación de toda la flota contra las reglas de alerta, notificando a los canales activos que no estén en ventana de cooldown.

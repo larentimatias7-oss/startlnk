@@ -1,6 +1,6 @@
 # Arquitectura de Software y Diseño Técnico
 
-Este documento detalla la arquitectura de software, los flujos de datos, el ciclo de vida de autenticación JWT y el modelo relacional del sistema **TSM Starlink Fleet & Usage Monitor**.
+Este documento detalla la arquitectura de software, los flujos de datos, el ciclo de vida de autenticación JWT, el modelo relacional y el motor de alertas del sistema **TSM Starlink Fleet & Usage Monitor (Milicic / TSM Patagonia)**.
 
 ---
 
@@ -10,9 +10,10 @@ El sistema implementa una arquitectura desacoplada y orientada a servicios, opti
 
 ### Principios de Diseño:
 1. **Desacoplamiento Operativo**: Los operadores y tableros de control leen exclusivamente desde una base de datos local SQLite de alta velocidad. Ninguna petición de lectura del frontend impacta de forma directa ni bloquea la API externa de ECHO.
-2. **Ingesta Asíncrona Desatendida**: Un worker en segundo plano (`APScheduler`) se encarga periódicamente de sincronizar el estado de la flota, telemetría de radiofrecuencia (RF), ciclos de facturación y consumo diario.
+2. **Ingesta Asíncrona Desatendida**: Un worker en segundo plano (`APScheduler`) sincroniza periódicamente el estado de la flota, telemetría de radiofrecuencia (RF), ciclos de facturación y consumo diario. La cadencia es parametrizable en caliente desde la interfaz (5 a 60 minutos).
 3. **Autenticación Transparente con Auto-Recuperación**: El cliente HTTP interno gestiona el ciclo de vida del token JWT Bearer, detecta vencimientos mediante códigos `401 Unauthorized` y renueva la sesión automáticamente sin interrumpir la operación.
-4. **Comandos Críticos con Doble Factor de Confirmación**: Las operaciones remotas de impacto operativo (*Reboot* y *Data Opt-In*) se ejecutan bajo demanda hacia el backoffice de Starlink a través de endpoints seguros y modales interactivos de confirmación.
+4. **Motor de Alertas y Despacho Multi-Bot**: Evaluación continua de doble criterio (umbrales fijos y proyección acelerada de consumo *burn-rate*) con ruteo hacia múltiples bots y canales de Telegram independientes.
+5. **Comandos Críticos con Doble Factor de Confirmación**: Las operaciones remotas de impacto operativo (*Reboot* y *Data Opt-In*) se ejecutan bajo demanda hacia el backoffice de Starlink a través de endpoints seguros y modales interactivos de confirmación.
 
 ---
 
@@ -20,75 +21,94 @@ El sistema implementa una arquitectura desacoplada y orientada a servicios, opti
 
 ```mermaid
 flowchart TB
-    subgraph ClientTier ["Capa de Presentación (Frontend SPA)"]
-        Browser["Navegador Web (Operador / NOC)"]
-        ReactApp["React 18 SPA (Vite + Tailwind CSS + Recharts)"]
-        Browser <--> ReactApp
+    subgraph ClientTier ["Capa de Presentación (Frontend SPA - React 18 + Vite)"]
+        Browser["Navegador Web (Operador NOC / Infraestructura Milicic)"]
+        Header["Header & Estado Upstream ECHO"]
+        KPIs["Tarjetas KPI & Alarmas"]
+        TrendChart["Gráfico Tendencia 30D Recharts"]
+        FleetTable["Tabla de Inventario, Ordenamiento & Burn-Rate"]
+        TerminalDetail["Modal Telemetría RF & Barras Diarias"]
+        AlertsView["AlertConfigView (Bots, Canales, Reglas, Auditoría)"]
+        Modals["Modales Confirmación Reboot / Opt-In"]
+        
+        Browser <--> Header
+        Browser <--> KPIs
+        Browser <--> TrendChart
+        Browser <--> FleetTable
+        Browser <--> AlertsView
+        Browser <--> TerminalDetail
+        Browser <--> Modals
     end
 
     subgraph APITier ["Capa de Aplicación y API (FastAPI Backend)"]
         FastAPIServer["Servidor ASGI (Uvicorn + FastAPI)"]
-        RouterTerminals["Router /api/terminals"]
-        RouterHealth["Router /api/health"]
-        SecurityLayer["Control de Confirmación & CORS"]
+        RouterTerminals["Router /api/terminals (Flota & Acciones)"]
+        RouterAlerts["Router /api/alerts (Config, Multi-Bot, Canales, Tests)"]
+        RouterHealth["Router /api/health (Salud & Sync Logs)"]
+        SecurityLayer["CORS, Masking de Secretos & Sanitización"]
         
         FastAPIServer --> RouterTerminals
+        FastAPIServer --> RouterAlerts
         FastAPIServer --> RouterHealth
         FastAPIServer --> SecurityLayer
     end
 
     subgraph ServiceTier ["Capa de Servicios y Segundo Plano"]
-        Scheduler["Planificador Periódico (APScheduler 15m)"]
+        Scheduler["Planificador Dinámico (APScheduler 5-60m)"]
         SyncService["Servicio de Ingesta (SyncService)"]
+        AlertService["Motor de Alertas (AlertService - Reglas & Cooldown)"]
+        TelegramService["Despacho Telegram (TelegramService - Multi-Bot)"]
         EchoClient["Cliente HTTP Asíncrono (EchoClient / httpx)"]
         TokenCache[("Caché JWT en Memoria")]
 
         Scheduler --> SyncService
         SyncService --> EchoClient
+        SyncService -->|Auto-evaluar tras ingesta| AlertService
+        AlertService --> TelegramService
         RouterTerminals -->|Comandos Remotos| EchoClient
+        RouterAlerts --> AlertService
+        RouterAlerts --> TelegramService
         EchoClient <--> TokenCache
     end
 
-    subgraph DataTier ["Capa de Persistencia (SQLite / SQLAlchemy)"]
+    subgraph DataTier ["Capa de Persistencia (SQLite / SQLAlchemy 2.0)"]
         DBEngine["Motor SQLAlchemy 2.0 (check_same_thread=False)"]
         TableTerminals[("Tabla terminals")]
         TableCycles[("Tabla billing_cycles")]
         TableUsages[("Tabla daily_usages")]
+        TableBots[("Tabla telegram_bots")]
+        TableChannels[("Tabla telegram_channels")]
+        TableConfig[("Tabla alert_configs")]
+        TableEvents[("Tabla alert_events")]
         TableLogs[("Tabla sync_logs")]
 
         DBEngine --- TableTerminals
         DBEngine --- TableCycles
         DBEngine --- TableUsages
+        DBEngine --- TableBots
+        DBEngine --- TableChannels
+        DBEngine --- TableConfig
+        DBEngine --- TableEvents
         DBEngine --- TableLogs
     end
 
-    subgraph UpstreamTier ["Servicios Externos (TSM ECHO)"]
-        EchoAPI["https://echo.tsmpatagonia.com.ar/api"]
-        AuthService["/login (JWT Auth)"]
-        FleetService["/stDeviceLists (Inventario)"]
-        TelemetryService["/stDeviceIdRouters/userterminal (RF)"]
-        BillingService["/billingCycles & /dailydatausage"]
-        BackofficeService["/backoffice/starlink (Reboot / Opt-In)"]
-
-        EchoAPI --- AuthService
-        EchoAPI --- FleetService
-        EchoAPI --- TelemetryService
-        EchoAPI --- BillingService
-        EchoAPI --- BackofficeService
+    subgraph ExternalServices ["Servicios Externos"]
+        EchoAPI["Plataforma TSM ECHO\nhttps://echo.tsmpatagonia.com.ar/api"]
+        TelegramAPI["Telegram Bot API\nhttps://api.telegram.org/bot<token>"]
     end
 
-    ReactApp -->|HTTP REST / JSON| FastAPIServer
-    RouterTerminals -->|Lectura Consultas SQL| DBEngine
-    RouterHealth -->|Verificación SELECT 1| DBEngine
-    SyncService -->|Escritura Transaccional| DBEngine
-    EchoClient -->|HTTPS Bearer JWT| EchoAPI
+    Header & KPIs & TrendChart & FleetTable & AlertsView -->|HTTP REST / JSON| FastAPIServer
+    RouterTerminals & RouterAlerts & RouterHealth -->|Consultas SQL| DBEngine
+    SyncService & AlertService -->|Escritura Transaccional| DBEngine
+    EchoClient -->|HTTPS Bearer JWT Outbound| EchoAPI
+    TelegramService -->|HTTPS POST JSON Outbound| TelegramAPI
 ```
 
 ---
 
 ## 3. Ciclo de Vida del JWT y Estrategia de Autenticación
 
-El acceso a la API interna de TSM ECHO requiere un token JSON Web Token (JWT) provisto en el encabezado HTTP `Authorization: Bearer <token>`.
+El acceso a la API interna de TSM ECHO requiere un JSON Web Token (JWT) provisto en el encabezado HTTP `Authorization: Bearer <token>`.
 
 ### 3.1. Adquisición Inicial del Token
 Al instanciarse o requerir una llamada a la API sin token en memoria, [`EchoClient`](file:///c:/antigravity/tsmpatagonia/backend/app/services/echo_client.py) ejecuta la autenticación:
@@ -100,103 +120,61 @@ Al instanciarse o requerir una llamada a la API sin token en memoria, [`EchoClie
     "password": "****************"
   }
   ```
-- **Respuesta**:
-  ```json
-  {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "id": 44,
-    "perfil_id": 4,
-    "grupo_id": 3
-  }
-  ```
-El token, el `user_id`, el `perfil_id` y el `grupo_id` se almacenan en el estado interno del cliente en memoria.
+- **Almacenamiento**: El token resultante se guarda en memoria RAM (`self._token`). **Nunca se escribe en disco ni se persiste en base de datos**.
 
-### 3.2. Manejo Automático de Errores 401 y Re-Login Transparente
-Dado que los tokens JWT de ECHO tienen una ventana de expiración definida, el método interno `_request()` intercepta las respuestas HTTP:
+### 3.2. Detección de Expiración y Re-autenticación Automática
+1. El cliente ejecuta la petición HTTP hacia el endpoint destino con el token actual.
+2. Si la respuesta retorna un código HTTP `401 Unauthorized`:
+   - El cliente invalida el token actual en memoria.
+   - Dispara automáticamente una nueva llamada a `/api/login`.
+   - Si la autenticación es exitosa, reintenta inmediatamente la petición original con el nuevo token.
+3. Este mecanismo previene fallas intermitentes por caducidad de sesión sin intervención del operador.
+
+---
+
+## 4. Flujo de Ingesta Periódica (SyncService)
+
+El proceso de sincronización se ejecuta a través de [`SyncService.sync_fleet()`](file:///c:/antigravity/tsmpatagonia/backend/app/services/sync_service.py):
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant S as SyncService / Endpoint
-    participant C as EchoClient (_request)
-    participant E as TSM ECHO API
+    participant Sch as APScheduler
+    participant Sync as SyncService
+    participant Echo as EchoClient (TSM ECHO)
+    participant DB as SQLite DB
+    participant Alert as AlertService
+    participant TG as Telegram API
 
-    S->>C: Ejecutar petición GET /stDeviceLists
-    C->>E: GET /stDeviceLists con Bearer Token actual
-    alt Token Válido (HTTP 200)
-        E-->>C: 200 OK (Datos de Flota)
-        C-->>S: Retorna JSON
-    else Token Expirado o Inválido (HTTP 401 Unauthorized)
-        E-->>C: 401 Unauthorized
-        Note over C: Interceptor detecta 401
-        C->>E: POST /login (Renovación de credenciales)
-        alt Login Exitoso
-            E-->>C: 200 OK (Nuevo Bearer Token)
-            Note over C: Actualiza token en memoria
-            C->>E: Reintenta petición original con nuevo Token
-            E-->>C: 200 OK (Datos de Flota)
-            C-->>S: Retorna JSON exitoso
-        else Fallo Crítico de Login
-            E-->>C: 401 / 500 Error
-            C-->>S: Retorna None (Registra error en logs)
-        end
+    Sch->>Sync: Disparo periódico (cada X minutos)
+    Sync->>Echo: GET /stDeviceLists (Inventario)
+    Echo-->>Sync: Lista de dispositivos y kitSerials
+    
+    loop Por cada terminal
+        Sync->>Echo: GET /stDeviceIdRouters/userterminal (RF y Telemetría)
+        Echo-->>Sync: SNR, Ping, Throughput, Obstrucción
+    end
+
+    Sync->>Echo: GET /billingCycles (Ciclos activos)
+    Echo-->>Sync: Cuotas y fechas de ciclo
+    
+    Sync->>Echo: GET /dailydatausage (Consumo diario)
+    Echo-->>Sync: Histórico de tráfico por categoría
+    
+    Sync->>DB: Upsert transaccional (terminals, cycles, usages)
+    Sync->>DB: Registrar log en sync_logs
+    
+    Sync->>Alert: evaluate_fleet_alerts()
+    Alert->>DB: Consultar reglas, cooldowns y bots
+    opt Alertas detectadas fuera de cooldown
+        Alert->>TG: Despachar notificaciones a canales activos
+        Alert->>DB: Registrar eventos en alert_events
     end
 ```
 
-### 3.3. Modo Contingencia / Demo
-Si las variables de entorno `ECHO_EMAIL` y `ECHO_PASSWORD` no están definidas o la red externa es inalcanzable:
-- `EchoClient.has_credentials` evalúa a `False`.
-- El sistema no detiene su arranque ni genera excepciones no controladas.
-- En la primera ejecución, [`SyncService`](file:///c:/antigravity/tsmpatagonia/backend/app/services/sync_service.py) inicializa una flota de demostración con 8 terminales georreferenciadas y 20 días de consumo simulado.
-- Si ya existían datos en la base local, se preserva el último snapshot disponible y el endpoint `/api/health` reporta estado `degraded` con advertencia explicativa.
-- Tan pronto se configuran credenciales válidas, el sistema detecta terminales reales en `/stDeviceLists`, purga los datos simulados y consolida la flota en vivo.
-
 ---
 
-## 4. Estrategia de Ingesta del Worker (`APScheduler`)
-
-Para evitar la saturación de los servidores de TSM ECHO y proveer tiempos de respuesta inferiores a 10 ms en el frontend, se implementa una tarea desatendida planificada.
-
-### 4.1. Configuración del Scheduler
-- **Librería**: `apscheduler.schedulers.asyncio.AsyncIOScheduler`
-- **Disparador**: `IntervalTrigger(minutes=settings.SYNC_INTERVAL_MINUTES)` (por defecto cada 15 minutos).
-- **Ciclo de Vida (Lifespan)**:
-  1. Al iniciar la aplicación FastAPI (`backend/app/main.py`), se arranca el scheduler.
-  2. Se programa un disparo inicial inmediato (`run_sync`) para garantizar que la base de datos esté actualizada desde el arranque.
-  3. Al detener el servidor (`shutdown`), el scheduler se cierra de forma ordenada mediante `scheduler.shutdown()`.
-
-### 4.2. Algoritmo de Sincronización Jerárquica
-Cada ciclo de ingesta ejecuta el siguiente orden de operaciones:
-
-1. **Consulta de Inventario Global**:
-   - Invoca `GET /stDeviceLists`. Si el perfil del usuario no posee acceso global (Perfil 4), utiliza el fallback `GET /stDeviceLists/user/{user_id}`.
-   - Extrae la lista de `deviceId`, `kitSerial`, `nickname`, `serviceLineNumber`, `isOnline` y `downlink`.
-2. **Saneamiento de Base de Datos**:
-   - Si se reciben identificadores reales, se eliminan los registros huérfanos o de demostración que no coincidan con la flota reportada.
-3. **Telemetría RF por Terminal**:
-   - Para cada enlace, invoca `GET /stDeviceIdRouters/userterminal/{clean_id}` (donde `clean_id` es el UUID sin el prefijo `ut`).
-   - Extrae métricas físicas: Throughput de bajada y subida en Mbps (convirtiendo desde bps), latencia de ping, calidad de señal (%), porcentaje de tiempo obstruido, uptime acumulado y celda geográfica H3.
-4. **Ciclos de Facturación por Service Line**:
-   - Con el `serviceLineNumber`, consulta `GET /billingCycles/{serviceLineNumber}`.
-   - Identifica el ciclo activo (último elemento del arreglo), calculando cuota contratada en GB (`DBtotalAmountGB`), consumo actual (`DBconsumedAmountGB`), porcentaje de utilización y estados de alarma (`NORMAL`, `80` o `100`).
-5. **Consumo Diario del Ciclo**:
-   - Con el `billingCycle.id` activo, consulta `GET /dailydatausage/{billingCycleId}`.
-   - Inserta o actualiza los consumos por fecha (`YYYY-MM-DD`), desagregando:
-     * `priority_gb` (Datos Prioritarios)
-     * `opt_in_priority_gb` (Datos Prioritarios Excedentes Opt-In)
-     * `standard_gb` (Datos Estándar Ilimitados)
-     * `non_bill_gb` (Tráfico no facturable)
-     * `total_gb` (Suma total del día)
-6. **Auditoría y Transaccionalidad**:
-   - Se ejecuta `db.commit()` tras procesar exitosamente la flota.
-   - Se registra una entrada en la tabla `sync_logs` con el total de terminales sincronizadas, marca de tiempo y estado (`SUCCESS` o `ERROR`).
-   - En caso de excepción, se invoca `db.rollback()` para garantizar la consistencia relacional.
-
----
-
-## 5. Modelo de Datos Relacional (SQLite / SQLAlchemy)
-
-La persistencia se implementa sobre SQLite utilizando SQLAlchemy 2.0 con soporte multihilo (`check_same_thread=False`).
+## 5. Modelo de Datos Relacional (SQLAlchemy ORM)
 
 ### 5.1. Diagrama Entidad-Relación (ER)
 
@@ -208,50 +186,51 @@ erDiagram
         string raw_device_id "UUID limpio sin prefijo ut"
         string nickname "Nombre asignado o kitSerial"
         string kit_serial "Número de serie del kit Starlink"
-        string service_line_number FK "Número de línea de servicio (ej: SL-...)"
-        string account_name "Razón social del cliente o cuenta"
+        string service_line_number FK "Número de línea de servicio (SL-...)"
+        string account_name "Razón social del cliente o campamento"
         boolean is_online "Estado de conectividad del enlace"
         float downlink_mbps "Ancho de banda actual de bajada"
         float uplink_mbps "Ancho de banda actual de subida"
         float ping_ms "Latencia de ida y vuelta promedio"
         float drop_rate "Tasa de paquetes descartados"
         float obstruction_percent "Porcentaje de visión satelital obstruida"
-        float signal_quality "Calidad del haz de radiofrecuencia (0-100%)"
-        integer uptime_seconds "Tiempo de funcionamiento continuo en segundos"
-        string dish_model "Modelo de antena (ej: Flat High Performance)"
+        float signal_quality "Calidad del haz de RF (0-100%)"
+        integer uptime_seconds "Tiempo continuo de operación"
+        string dish_model "Modelo de antena satelital"
         string dish_serial "Número de serie de la antena"
-        boolean has_public_ip "Indica si posee IP pública enrutable"
+        boolean has_public_ip "Indica si posee IP pública"
         string router_id "Identificador del router asociado"
-        boolean wifi_bypassed "Modo bypass / puente del router Wi-Fi"
-        float latitude "Coordenada de latitud geográfica"
-        float longitude "Coordenada de longitud geográfica"
-        string h3_cell_id "Índice geoespacial H3 de Uber"
+        boolean wifi_bypassed "Modo puente / bypass del Wi-Fi"
+        float latitude "Coordenada de latitud"
+        float longitude "Coordenada de longitud"
+        string h3_cell_id "Índice geoespacial H3"
         boolean is_alert "Bandera de alerta activa"
-        string consumed_alarm "Nivel de alarma de cuota (NORMAL, 80, 100)"
-        string active_alerts_json "Detalle JSON de alarmas"
-        datetime updated_at "Fecha y hora de última actualización"
+        string consumed_alarm "Alarma de cuota (NORMAL, 80, 100)"
+        string active_alerts_json "Detalle JSON de alertas activas"
+        boolean alerts_enabled "Control individual de alertas (Silenciar)"
+        datetime updated_at "Fecha y hora de actualización"
     }
 
     billing_cycles {
-        integer id PK "Identificador único de ciclo provisto por ECHO"
-        string service_line_number "Línea de servicio asociada (indexada)"
-        string start_date "Fecha inicio ciclo (ISO-8601)"
-        string end_date "Fecha fin ciclo (ISO-8601)"
-        float total_amount_gb "Cuota mensual total contratada en GB"
-        float consumed_amount_gb "Consumo acumulado a la fecha en GB"
-        float consumed_percent "Porcentaje de consumo de la cuota"
+        integer id PK "Identificador único provisto por ECHO"
+        string service_line_number "Línea de servicio asociada"
+        string start_date "Fecha inicio ciclo"
+        string end_date "Fecha fin ciclo"
+        float total_amount_gb "Cuota mensual total contratada (GB)"
+        float consumed_amount_gb "Consumo acumulado a la fecha (GB)"
+        float consumed_percent "Porcentaje de consumo de cuota"
         string consumed_alarm "Estado de alarma (NORMAL, 80, 100)"
-        string consumed_status "Estado de facturación (ACTIVE, OVERAGE)"
-        string currency "Moneda del contrato (ej: USD)"
+        string consumed_status "Estado de facturación"
+        string currency "Moneda del contrato"
         boolean is_active "Indica si es el ciclo en curso"
         datetime updated_at "Fecha y hora de actualización"
     }
 
     daily_usages {
         integer id PK "Autoincremental primario"
-        integer billing_cycle_id FK "Clave foránea hacia billing_cycles.id"
+        integer billing_cycle_id FK "FK hacia billing_cycles.id"
         string service_line_number "Línea de servicio asociada"
-        string date "Fecha del consumo (formato YYYY-MM-DD)"
+        string date "Fecha del consumo (YYYY-MM-DD)"
         float priority_gb "Consumo en datos prioritarios (GB)"
         float opt_in_priority_gb "Consumo excedente con cargo (GB)"
         float standard_gb "Consumo en datos estándar (GB)"
@@ -259,75 +238,102 @@ erDiagram
         float total_gb "Consumo total acumulado en el día (GB)"
     }
 
+    telegram_bots {
+        integer id PK "Autoincremental primario"
+        string name "Nombre amigable (ej: Alertas Infra MILICIC)"
+        string token "HTTP API Token de @BotFather"
+        string bot_username "Usuario del bot en Telegram (sin @)"
+        string bot_id "ID numérico único del bot"
+        boolean is_default "Indica si es el bot predeterminado"
+        boolean is_active "Estado operativo del bot"
+        datetime created_at "Fecha de registro"
+    }
+
+    telegram_channels {
+        integer id PK "Autoincremental primario"
+        string name "Nombre descriptivo del canal o grupo"
+        string chat_id "Chat ID de Telegram (ej: -1004383937012)"
+        integer bot_id FK "FK hacia telegram_bots.id"
+        boolean is_active "Estado de despacho (activo/pausado)"
+        datetime created_at "Fecha de registro"
+    }
+
+    alert_configs {
+        integer id PK "Identificador único"
+        string telegram_bot_token "Token legacy / fallback de bot"
+        float quota_threshold_percent "Umbral de advertencia de cuota (%)"
+        float quota_critical_percent "Umbral de cuota crítica (%)"
+        float early_warning_percent "Umbral de consumo para burn-rate (%)"
+        integer early_warning_days_remaining "Días restantes mínimos para burn-rate"
+        boolean alert_on_offline "Notificar enlaces caídos"
+        integer cooldown_hours "Ventana anti-spam de enfriamiento (hs)"
+        integer sync_interval_minutes "Cadencia de sincronización en minutos"
+        boolean is_enabled "Interruptor maestro de alertas"
+        datetime updated_at "Última modificación"
+    }
+
+    alert_events {
+        integer id PK "Autoincremental primario"
+        string terminal_id "Identificador de la terminal"
+        string terminal_name "Nombre amigable de la antena"
+        string service_line_number "Línea de servicio"
+        string alert_type "Tipo (QUOTA_WARNING, EARLY_BURN_RATE, etc)"
+        string severity "Severidad (WARNING, CRITICAL)"
+        string message "Resumen descriptivo del evento"
+        integer channels_notified "Cantidad de canales notificados"
+        datetime timestamp "Fecha y hora del despacho"
+    }
+
     sync_logs {
         integer id PK "Autoincremental primario"
         datetime timestamp "Marca de tiempo de la sincronización"
-        string status "Resultado de la ingesta (SUCCESS, WARNING, ERROR)"
-        integer terminals_count "Cantidad de terminales procesadas"
+        string status "Resultado (SUCCESS, WARNING, ERROR)"
+        integer terminals_count "Terminales procesadas"
         string message "Mensaje descriptivo o traza de error"
     }
 
-    billing_cycles ||--o{ daily_usages : "contiene registros diarios (CASCADE DELETE)"
+    billing_cycles ||--o{ daily_usages : "contiene registros diarios"
     terminals ||--o{ billing_cycles : "asociado por service_line_number"
+    telegram_bots ||--o{ telegram_channels : "asigna bot emisor a canal"
 ```
 
-### 5.2. Detalle de Tablas y Restricciones
+---
 
-#### Tabla `terminals`
-- Almacena el inventario de antenas, su estado operacional y métricas de RF.
-- **Índices**: `id` (PK), `device_id`, `service_line_number`.
-- Permite búsquedas textuales optimizadas (`ilike`) por `nickname`, `kit_serial`, `service_line_number` y `account_name`.
+## 6. Motor de Alertas Inteligente
 
-#### Tabla `billing_cycles`
-- Representa los períodos de facturación de cada línea de servicio.
-- **Índices**: `id` (PK asignada por ECHO), `service_line_number`.
-- Relación uno a muchos con `daily_usages` con eliminación en cascada (`ondelete="CASCADE"`).
+### 6.1. Reglas de Evaluación
+El motor evalúa concurrentemente 4 categorías de eventos:
+1. **Cuota Crítica (≥ 100%)**: Dispara alerta roja ante agotamiento total de cuota contratada.
+2. **Cuota de Advertencia (≥ 80%)**: Dispara alerta preventiva antes de agotar los datos prioritarios.
+3. **Alerta Temprana de Ritmo Acelerado (*Burn-Rate*)**:
+   $$\text{Tasa Diaria} = \frac{\text{Consumo Acumulado (GB)}}{\text{Días Transcurridos del Ciclo}}$$
+   $$\text{Días para Agotamiento} = \frac{\text{Cuota Restante (GB)}}{\text{Tasa Diaria}}$$
+   Si el consumo supera el umbral configurado (ej: 60%) restando más de $X$ días en el ciclo (ej: 15 días) y los días para agotar la cuota son menores a los días restantes de ciclo, se genera una advertencia preventiva de sobreconsumo.
+4. **Enlace Satelital Desconectado (*Offline*)**: Si la opción está habilitada en la configuración, notifica antenas sin reporte de RF.
 
-#### Tabla `daily_usages`
-- Desglose diario de datos transmitidos por tipo de servicio.
-- **Índices**: `id` (PK), `billing_cycle_id` (FK), `service_line_number`, `date`.
-- **Restricción de Unicidad Compuesta**: `Index("ix_cycle_date", "billing_cycle_id", "date", unique=True)` que previene duplicación de métricas al re-sincronizar el mismo día.
+### 6.2. Ventana de Cooldown Anti-Spam
+Para evitar saturar los canales de guardia con mensajes repetitivos cada 15 minutos:
+- Cada terminal registra en memoria la última fecha de notificación por tipo de alerta.
+- No se vuelve a emitir la misma alerta a los canales generales hasta transcurrido el lapso de `cooldown_hours` (configurable entre 2 y 24 horas).
 
-#### Tabla `sync_logs`
-- Bitácora de auditoría para supervisar la salud del worker en segundo plano y diagnosticar problemas de conectividad upstream.
-- Permite al frontend determinar con precisión cuándo fue el último refresco exitoso.
+### 6.3. Despacho Multi-Bot y Pruebas con Alertas Reales
+- **Ruteo Multi-Bot**: Cada canal de Telegram despacha sus mensajes a través de su bot asignado (`bot_id`). Si el bot específico no está disponible, conmuta limpiamente al bot predeterminado (`is_default`).
+- **Prueba en Vivo con Alertas Reales (`test_channel_with_real_alerts`)**: Evalúa el estado de la flota al momento exacto de accionar el botón, omite la ventana de cooldown y despacha todas las alertas reales vigentes al canal seleccionado, garantizando una validación fidedigna de entrega.
 
 ---
 
-## 6. Sistema de Diseño Milicic UI & Arquitectura de Componentes
+## 7. Arquitectura de Componentes Frontend (Milicic UI)
 
-La capa de frontend implementa el sistema de diseño corporativo **Milicic UI** ([`.agent/skills/diseno-UI-milicic/SKILL.md`](file:///c:/antigravity/tsmpatagonia/.agent/skills/diseno-UI-milicic/SKILL.md)):
+La aplicación web está estructurada en componentes desacoplados diseñados bajo los lineamientos corporativos de Milicic S.A.:
 
-### 6.1. Tokens y Variables Visuales
-- **Canvas Base (`#0F141A`)**: Fondo oscuro profundo con tinte pizarra.
-- **Superficie de Tarjetas (`#1A222B`)**: Contenedores elevados con bordes de contraste `#2A3441`.
-- **Naranja Milicic (`#F39200`)**: Color primario para botones de acción, acentos de selección y líneas de tendencia destacadas.
-- **Estados Operativos**:
-  - `Activo / Online`: Verde esmeralda `#10B981` con pulso lumínico.
-  - `Offline / Crítico`: Rojo rubí `#EF4444`.
-  - `Advertencia / Cuota > 80%`: Ámbar `#F59E0B`.
-
-### 6.2. Componentes Desacoplados
-- **[`MilicicLogo.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/MilicicLogo.jsx)**: Componente corporativo optimizado para renderizar el isotipo de franjas y texto institucional sin artefactos ni degradación por escalado.
-- **[`Header.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Header.jsx)**: Header corporativo con badge de estado del upstream ECHO y botón de sincronización manual interactivo con spinner.
-- **[`KpiCards.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/KpiCards.jsx)**: 4 métricas directas: Disponibilidad de flota, Terminales online/offline, Consumo global en GB y Estado de cuotas prioritarias.
-- **[`FleetChart.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/FleetChart.jsx)**: Gráfico Recharts con gradientes de color corporativos Milicic, tooltips personalizados y formato de fechas dinámico.
-- **[`TerminalTable.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalTable.jsx)**: Tabla de inventario de alto rendimiento con barra de búsqueda reactiva y filtros por estado.
-- **[`TerminalDetailModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalDetailModal.jsx)**: Ficha técnica emergente con métricas de RF en vivo (SNR, Azimuth, Elevación, Ping) e histograma de consumo diario.
-- **[`ActionConfirmModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/ActionConfirmModal.jsx)**: Modal de doble confirmación para salvaguardar acciones críticas (*Reboot* y *Data Opt-In*).
-- **[`Toast.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Toast.jsx)**: Notificaciones flotantes no invasivas para confirmación de comandos y avisos de red.
-
----
-
-## 7. Arquitectura de Red y Enrutamiento Dokploy + Traefik
-
-El sistema en producción opera en un entorno contenerizado administrado por Dokploy:
-
-1. **Ingress Traefik Dinámico**: Traefik escucha peticiones en los puertos 80 y 443 del host. Mediante su proveedor de Docker conectado a `/var/run/docker.sock`, detecta automáticamente el contenedor `tsm_starlink_frontend` a través de sus etiquetas:
-   - `traefik.enable=true`
-   - `traefik.http.routers.starlink-frontend.rule=Host('starlink.milicic.local')`
-   - `traefik.docker.network=dokploy-network`
-2. **Red Interna `dokploy-network`**: Permite la comunicación segura y directa entre Traefik y el frontend sin exponer puertos al sistema operativo anfitrión.
-3. **Servidor Web Nginx Interno**: El contenedor de frontend ejecuta Nginx en el puerto 80, sirviendo los activos estáticos compilados de React e implementando un proxy inverso para la ruta `/api/` hacia `http://backend:8000/api/`.
-4. **Persistencia Transaccional**: El backend monta el volumen nombrado de Docker `starlink_data` en `/app/data`, asegurando que la base de datos `starlink_dashboard.db` conserve los históricos aun cuando los contenedores se reconstruyan o actualicen.
-
+- **[`Header.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Header.jsx)**: Identidad de marca con isotipo oficial, indicador de estado de conexión upstream ECHO y accesos rápidos.
+- **[`KpiCards.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/KpiCards.jsx)**: 4 tarjetas métricas directas: disponibilidad de flota, terminales online/offline, consumo mensual global y balance de cuotas.
+- **[`FleetChart.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/FleetChart.jsx)**: Gráfico de área apilado con Recharts que ilustra la tendencia acumulada de 30 días con gradientes corporativos.
+- **[`TerminalTable.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalTable.jsx)**: Tabla reactiva de inventario con ordenamiento multimétrica, badges de estado, indicadores de burn-rate y conmutador individual de alertas por antena.
+- **[`AlertConfigView.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/AlertConfigView.jsx)**: Centro de configuración integral dividido en pestañas:
+  1. *Telegram & Bots*: Alta de múltiples bots con validación `getMe`, gestión de canales y botones de prueba (`Probar Canal` y `Alertas Reales`).
+  2. *Reglas de Alerta*: Parametrización de umbrales, detección de burn-rate, cooldown y cadencia del sincronizador.
+  3. *Historial de Auditoría*: Bitácora de incidentes y notificaciones emitidas.
+- **[`TerminalDetailModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/TerminalDetailModal.jsx)**: Modal de telemetría de RF en tiempo real (SNR, Azimuth, Elevación, Ping, Obstrucción) y desglose de consumo por día.
+- **[`ActionConfirmModal.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/ActionConfirmModal.jsx)**: Modal de confirmación con doble validación de seguridad para operaciones de alto impacto (*Reboot* y *Data Opt-In*).
+- **[`Toast.jsx`](file:///c:/antigravity/tsmpatagonia/frontend/src/components/Toast.jsx)**: Sistema reactivo de avisos flotantes corporativos para confirmaciones y alertas de error.

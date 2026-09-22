@@ -156,7 +156,10 @@ flowchart LR
   ```text
   INFO: Successfully authenticated with TSM ECHO as user it.infra@milicic.com.ar
   ```
-  La contraseña nunca es impresa en `stdout`, `stderr` ni en los registros del contenedor (`docker logs`).
+- **Sanitización de Tokens de Telegram (`token_masked`)**:
+  Al consultar `/api/alerts/bots`, el backend enmascara obligatoriamente los tokens de Telegram (`8899338410:AAHP...b_c8`), impidiendo que ojos indiscretos, grabaciones de pantalla o inspectores de red expongan la clave del bot.
+- **Validación Criptográfica Previa con Telegram**:
+  Antes de almacenar cualquier token en el sistema, se ejecuta una llamada HTTPS efímera hacia la API `getMe` de Telegram. Si el token es inválido o no existe, es rechazado de inmediato sin persistirlo.
 
 ---
 
@@ -166,6 +169,7 @@ flowchart LR
 | :--- | :--- | :--- | :--- | :--- |
 | **`ECHO_PASSWORD`** | Dokploy Env Variables / `.env` del host | ❌ Nunca (ignorado por `.gitignore`) | ❌ Cero (solo backend server-to-server) | Inyección en RAM + Permisos restrictivos |
 | **Token Bearer JWT** | Memoria RAM del proceso Uvicorn | ❌ No persistido | ❌ No accesible | Destrucción al detener el proceso + Auto-renovación |
+| **Tokens Bots Telegram** | Base de datos SQLite / Dokploy Env | ❌ Nunca commiteados | 🛡️ Solo enmascarado (`token_masked`) | Verificación getMe previa + Enmascaramiento visual |
 | **`DATABASE_URL`** | Variable de entorno del contenedor | ❌ Solo ruta local por defecto | ❌ No accesible | Volumen aislado `starlink_data` |
 | **Credenciales Gitea** | Windows Credential Manager / Dokploy | ❌ Git ignora credenciales | ❌ No accesible | Protocolo Git Credential Manager nativo |
 

@@ -58,11 +58,16 @@ graph TD
         EchoAPI["https://echo.tsmpatagonia.com.ar/api"]
     end
 
+    subgraph ExternalAlerts ["Notificaciones Telegram"]
+        TelegramAPI["Telegram Bot API\nhttps://api.telegram.org"]
+    end
+
     Client -->|HTTP Host: starlink.milicic.local| Traefik
     Traefik -->|Proxy a frontend:80| Frontend
     Frontend -->|Proxy pass /api/ a backend:8000| Backend
     Backend --> DBVolume
     Backend -->|HTTPS Bearer JWT Outbound| EchoAPI
+    Backend -->|HTTPS Notificaciones Multi-Bot| TelegramAPI
     Runner -->|CI Build & Tests| GiteaServer
 ```
 
@@ -142,7 +147,14 @@ SYNC_INTERVAL_MINUTES=15
 DATABASE_URL=sqlite:////app/data/starlink_dashboard.db
 HOST=0.0.0.0
 PORT=8000
+# Opcional (fallback legacy si no se configuran bots en la UI):
+TELEGRAM_BOT_TOKEN=8899338410:AAHP...
 ```
+
+> [!TIP]
+> **Gestión Dinámica de Bots y Canales en Caliente**:
+> Los Tokens de Bot de Telegram y los Canales/Grupos destinatarios se administran directamente desde la interfaz web corporativa (pestaña **Telegram & Bots**), sin necesidad de editar variables de entorno ni reiniciar los contenedores. Cada bot registrado se valida automáticamente contra la API oficial de Telegram (`getMe`) y sus tokens se almacenan y exponen de forma enmascarada (`token_masked`) para máxima seguridad.
+
 
 ---
 

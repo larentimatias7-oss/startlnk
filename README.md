@@ -36,14 +36,17 @@ El **TSM Starlink Fleet & Usage Monitor** es una solución Full-Stack diseñada 
 ### Capacidades Destacadas:
 - **Monitoreo de Flota Unificado**: Visualización del estado en línea/fuera de línea, latencia de ping, fluctuación de throughput de bajada/subida y calidad de señal.
 - **Interactividad y Ordenamiento Multimétrica**: Tabla reactiva con ordenamiento ascendente/descendente configurable por cualquier métrica clave: consumo (GB / %), throughput instantáneo, latencia de ping, días restantes de ciclo y estado del terminal.
+- **Silenciamiento Individual de Terminales**: Control granular (`alerts_enabled`) para pausar notificaciones en antenas en mantenimiento programado o traslados sin afectar al resto de la flota.
 - **Motor de Alertas Inteligente con Doble Criterio**:
   - *Regla 1 (Umbral Fijo)*: Alerta al superar porcentajes configurables de cuota mensual (ej. 80%, 100%).
   - *Regla 2 (Burn-Rate / Alerta Temprana)*: Detección inteligente de ritmo acelerado de consumo que agotará el paquete antes del cierre de ciclo (evalúa `% consumido` vs `días restantes del ciclo`).
-  - *Ventana de Cooldown Anti-Spam*: Evita alertas repetitivas mediante enfriamiento configurable por terminal.
-- **Notificaciones Multicanal vía Telegram**:
-  - Gestión desde la interfaz web de Token de Bot de Telegram y múltiples canales/chats con activación individual (`is_active`).
-  - Botón de prueba interactivo para validar la entrega en cada canal en tiempo real.
-  - Historial persistido de incidencias y entregas.
+  - *Ventana de Cooldown Anti-Spam*: Evita alertas repetitivas mediante enfriamiento configurable por terminal (2 a 24 horas).
+  - *Cadencia Parametrizable en Caliente*: Frecuencia de sincronización y evaluación ajustable dinámicamente (5 a 60 minutos) sin reiniciar servicios.
+- **Arquitectura Multi-Bot y Notificaciones en Telegram**:
+  - Gestión simultánea de múltiples bots de Telegram corporativos con validación criptográfica en vivo (`getMe`) y enmascaramiento de tokens.
+  - Canales y grupos destinatarios vinculados a bots específicos con activación/pausa individual.
+  - **Prueba de Canal con Alertas Reales**: Botón para evaluar la flota en el momento exacto y despachar todas las alertas vigentes al canal, omitiendo el cooldown para una validación fidedigna de guardia.
+  - Historial persistido de incidencias y entregas en base de datos.
 - **Acciones Operativas Seguras**: Ejecución remota de reinicios de terminal (*reboot*) y conmutación de política de sobreconsumo prioritario (*Data Opt-In / Opt-Out*) con doble confirmación interactiva.
 - **Resiliencia Operativa y Offline-First**: Ingesta persistida en SQLite local mediante SQLAlchemy 2.0. En caso de corte o interrupción con el backend de TSM ECHO, el dashboard sigue respondiendo con el último snapshot histórico sin degradar la experiencia de usuario.
 
@@ -57,7 +60,7 @@ El sistema implementa una arquitectura desacoplada y reactiva:
 graph TD
     subgraph Frontend ["Frontend (SPA React 18 + Vite)"]
         UI_Head[Header & Estado Conexión ECHO]
-        UI_Alerts[Modal de Alertas & Telegram]
+        UI_Alerts[AlertConfigView - Multi-Bot, Canales, Reglas & Auditoría]
         UI_KPIs[Tarjetas KPI & Disponibilidad]
         UI_Chart[Gráfico Tendencia 30D Recharts]
         UI_Table[Inventario, Ordenamiento & Burn-Rate]
@@ -68,14 +71,14 @@ graph TD
     subgraph Backend ["Backend API & Ingestion (FastAPI)"]
         API[Routers: /api/terminals, /api/health, /api/alerts]
         AlertsEng[Motor de Alertas: Umbral Fijo + Burn-Rate]
-        Worker[Background Ingester - APScheduler cada 15m]
+        Worker[Background Ingester - APScheduler Dinámico 5-60m]
         Client[EchoClient Asíncrono - httpx]
         ORM[(SQLite Local - starlink_dashboard.db)]
     end
 
     subgraph External ["Servicios Externos"]
         ECHO_API["Plataforma TSM ECHO\nhttps://echo.tsmpatagonia.com.ar/api"]
-        TG_API["Telegram Bot API\nhttps://api.telegram.org/bot<token>"]
+        TG_API["Telegram Bot API\n(Despacho Multi-Bot)"]
     end
 
     UI_Head -->|HTTP /api/health| API
@@ -361,18 +364,25 @@ Para garantizar la seguridad de las credenciales de la plataforma TSM ECHO y los
 | `GET` | `/api/terminals/{id}/usage-history`| `id` (device_id) | Historial diario estructurado de consumo para gráficos Recharts |
 | `POST`| `/api/terminals/{id}/reboot` | `id` (device_id) | Dispara orden de reinicio remoto de la antena vía Starlink Backoffice |
 | `POST`| `/api/terminals/{sl}/opt-in` | `sl` (service_line_number), `?enabled=bool` | Conmuta política de sobreconsumo prioritario (Opt-In / Opt-Out) |
+| `POST`| `/api/terminals/{id}/toggle-alerts`| `id` (device_id o id interno) | Activa o silencia individualmente las alertas para un terminal |
 | `POST`| `/api/terminals/sync` | Ninguno | Dispara sincronización forzada e inmediata contra TSM ECHO |
 
-### Motor de Alertas & Canales Telegram
+### Motor de Alertas & Telegram Multi-Bot
 | Método | Endpoint | Parámetros / Payload | Descripción |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/alerts/config` | Ninguno | Obtiene la configuración de umbrales, burn-rate y token del bot |
-| `PUT` | `/api/alerts/config` | `AlertConfigUpdate` (JSON) | Actualiza umbrales de cuota, días restantes y cooldown |
-| `GET` | `/api/alerts/channels` | Ninguno | Lista todos los canales de Telegram registrados con su estado |
-| `POST`| `/api/alerts/channels` | `TelegramChannelCreate` (JSON) | Da de alta un nuevo canal con nombre amigable y Chat ID |
-| `PUT` | `/api/alerts/channels/{id}` | `TelegramChannelUpdate` (JSON) | Modifica nombre, Chat ID o activa/pausa (`is_active`) un canal |
+| `GET` | `/api/alerts/config` | Ninguno | Obtiene la configuración de umbrales, cadencia y cooldown |
+| `PUT` | `/api/alerts/config` | `AlertConfigUpdate` (JSON) | Actualiza umbrales de cuota, cadencia dinámica y cooldown |
+| `GET` | `/api/alerts/bots` | Ninguno | Lista los bots de Telegram configurados con tokens enmascarados |
+| `POST`| `/api/alerts/bots` | `TelegramBotCreate` (JSON) | Registra un nuevo bot con validación oficial previa `getMe` |
+| `PUT` | `/api/alerts/bots/{id}` | `TelegramBotUpdate` (JSON) | Modifica o conmuta el bot predeterminado |
+| `DELETE`| `/api/alerts/bots/{id}`| `id` (entero) | Elimina un bot y reasigna canales al bot por defecto |
+| `POST`| `/api/alerts/verify-bot` | `VerifyBotRequest` (JSON) | Valida en caliente un token contra la API de Telegram |
+| `GET` | `/api/alerts/channels` | Ninguno | Lista canales y grupos de Telegram con su bot emisor asociado |
+| `POST`| `/api/alerts/channels` | `TelegramChannelCreate` (JSON) | Registra un nuevo canal vinculándolo a un bot específico |
+| `PUT` | `/api/alerts/channels/{id}` | `TelegramChannelUpdate` (JSON) | Modifica bot asignado o conmuta estado (activo/pausado) |
 | `DELETE`| `/api/alerts/channels/{id}`| `id` (entero) | Elimina un canal de la lista de destinatarios |
-| `POST`| `/api/alerts/test-telegram` | `TestTelegramRequest` (JSON) | Envía mensaje interactivo de prueba para verificar entrega |
+| `POST`| `/api/alerts/test-telegram` | `TestTelegramRequest` (JSON) | Envía mensaje simple de prueba de conectividad |
+| `POST`| `/api/alerts/channels/{id}/test-real-alerts` | `id` (entero) | **Evalúa la flota en vivo y despacha las alertas vigentes al canal** |
 | `GET` | `/api/alerts/history` | `?limit=50` | Retorna el historial de incidentes y notificaciones despachadas |
 | `POST`| `/api/alerts/evaluate` | Ninguno | Evalúa inmediatamente toda la flota contra las reglas de alerta |
 
@@ -451,8 +461,8 @@ tsmpatagonia/
 │   │   │   ├── MilicicLogo.jsx     # Isotipo y logotipo oficial de Milicic S.A.
 │   │   │   ├── KpiCards.jsx        # 4 tarjetas de métricas críticas y alarmas
 │   │   │   ├── FleetChart.jsx      # Gráfico de área apilado (30 días de flota)
-│   │   │   ├── TerminalTable.jsx   # Tabla de inventario interactiva, ordenamiento y badge de burn-rate
-│   │   │   ├── AlertConfigModal.jsx# Panel de configuración de Telegram, umbrales y registro de eventos
+│   │   │   ├── TerminalTable.jsx   # Tabla de inventario interactiva, ordenamiento, silenciar alertas y burn-rate
+│   │   │   ├── AlertConfigView.jsx # Centro de control: Multi-Bot, Canales, Reglas, Cadencia y Auditoría
 │   │   │   ├── TerminalDetailModal.jsx # Telemetría RF y barras de consumo diario
 │   │   │   ├── ActionConfirmModal.jsx  # Modal de confirmación para Reboot y Opt-In
 │   │   │   └── Toast.jsx           # Notificaciones toast flotantes interactivas
