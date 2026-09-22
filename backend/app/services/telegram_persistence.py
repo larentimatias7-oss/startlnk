@@ -133,13 +133,17 @@ def seed_telegram_defaults(db: Session):
             # Add channels
             for ch_data in config_data.get("channels", []):
                 target_bot_id = bot_map.get(ch_data.get("bot_id"), default_bot_id)
-                ch = TelegramChannel(
-                    name=ch_data["name"],
-                    chat_id=ch_data["chat_id"],
-                    bot_id=target_bot_id,
-                    is_active=ch_data.get("is_active", True),
-                )
-                db.add(ch)
+                existing = db.query(TelegramChannel).filter(TelegramChannel.chat_id == ch_data["chat_id"]).first()
+                if not existing:
+                    ch = TelegramChannel(
+                        name=ch_data["name"],
+                        chat_id=ch_data["chat_id"],
+                        bot_id=target_bot_id,
+                        is_active=ch_data.get("is_active", True),
+                    )
+                    db.add(ch)
+                else:
+                    existing.bot_id = target_bot_id
             db.commit()
 
         elif config_data and "bot" in config_data:
@@ -158,13 +162,17 @@ def seed_telegram_defaults(db: Session):
             db.refresh(default_bot)
 
             for ch_data in config_data.get("channels", []):
-                ch = TelegramChannel(
-                    name=ch_data["name"],
-                    chat_id=ch_data["chat_id"],
-                    bot_id=default_bot.id,
-                    is_active=ch_data.get("is_active", True),
-                )
-                db.add(ch)
+                existing = db.query(TelegramChannel).filter(TelegramChannel.chat_id == ch_data["chat_id"]).first()
+                if not existing:
+                    ch = TelegramChannel(
+                        name=ch_data["name"],
+                        chat_id=ch_data["chat_id"],
+                        bot_id=default_bot.id,
+                        is_active=ch_data.get("is_active", True),
+                    )
+                    db.add(ch)
+                else:
+                    existing.bot_id = default_bot.id
             db.commit()
         else:
             # Fallback directly to settings
@@ -183,15 +191,20 @@ def seed_telegram_defaults(db: Session):
             db.refresh(default_bot)
 
             # Default Milicic channel
-            default_ch = TelegramChannel(
-                name="Telegram Milicic",
-                chat_id=settings.TELEGRAM_DEFAULT_CHAT_ID,
-                bot_id=default_bot.id,
-                is_active=True,
-            )
-            db.add(default_ch)
+            existing = db.query(TelegramChannel).filter(TelegramChannel.chat_id == settings.TELEGRAM_DEFAULT_CHAT_ID).first()
+            if not existing:
+                default_ch = TelegramChannel(
+                    name="Telegram Milicic",
+                    chat_id=settings.TELEGRAM_DEFAULT_CHAT_ID,
+                    bot_id=default_bot.id,
+                    is_active=True,
+                )
+                db.add(default_ch)
+            else:
+                existing.bot_id = default_bot.id
             db.commit()
 
         logger.info("Default Telegram bot and channels successfully seeded and active.")
     except Exception as e:
+        db.rollback()
         logger.error(f"Error seeding default Telegram configuration: {e}")

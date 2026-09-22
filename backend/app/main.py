@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -25,21 +26,29 @@ logger = logging.getLogger("starlink_app")
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing TSM Starlink Dashboard Database and migrations...")
-    apply_migrations()
-    
-    # Run initial sync on startup
-    logger.info("Running startup synchronization...")
-    db = SessionLocal()
     try:
-        service = SyncService(db)
-        await service.run_sync()
+        apply_migrations()
     except Exception as e:
-        logger.error(f"Startup sync failed: {e}")
-    finally:
-        db.close()
+        logger.error(f"Migration error: {e}")
 
     # Start background scheduler
     start_scheduler()
+
+    # Initial sync as non-blocking background task so port 8000 binds instantly
+    async def _startup_sync_bg():
+        await asyncio.sleep(0.5)
+        logger.info("Running initial background synchronization...")
+        db = SessionLocal()
+        try:
+            service = SyncService(db)
+            await service.run_sync()
+            logger.info("Initial background synchronization completed.")
+        except Exception as err:
+            logger.error(f"Startup sync failed: {err}")
+        finally:
+            db.close()
+
+    asyncio.create_task(_startup_sync_bg())
     yield
 
     # Shutdown

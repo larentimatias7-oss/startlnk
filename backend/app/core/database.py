@@ -1,6 +1,16 @@
+from pathlib import Path
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.app.core.config import settings
+
+# Ensure SQLite directory exists if path is provided
+if settings.DATABASE_URL.startswith("sqlite"):
+    db_raw = settings.DATABASE_URL.replace("sqlite:////", "/").replace("sqlite:///", "")
+    if db_raw and not db_raw.startswith(":memory:"):
+        try:
+            Path(db_raw).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
 
 # For SQLite, check_same_thread needs to be False
 connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
@@ -16,7 +26,10 @@ Base = declarative_base()
 def apply_migrations():
     """Applies non-destructive schema additions for existing SQLite database files."""
     # Ensure all tables are created first
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        pass
 
     with engine.connect() as conn:
         # 1. Terminals alerts_enabled
