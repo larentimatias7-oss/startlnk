@@ -23,14 +23,22 @@ from backend.app.services.alert_service import AlertService
 
 router = APIRouter(prefix="/terminals", tags=["terminals"])
 
-def _build_summary(t: Terminal, db: Session) -> TerminalSummary:
+def _build_summary(
+    t: Terminal,
+    db: Session,
+    active_cycles_map: Optional[dict] = None,
+    config: Optional[object] = None
+) -> TerminalSummary:
     # Find active cycle for this terminal's service line
     active_cycle = None
     if t.service_line_number:
-        active_cycle = db.query(BillingCycle).filter(
-            BillingCycle.service_line_number == t.service_line_number,
-            BillingCycle.is_active == True
-        ).first()
+        if active_cycles_map is not None:
+            active_cycle = active_cycles_map.get(t.service_line_number)
+        else:
+            active_cycle = db.query(BillingCycle).filter(
+                BillingCycle.service_line_number == t.service_line_number,
+                BillingCycle.is_active == True
+            ).first()
 
     quota_total = active_cycle.total_amount_gb if active_cycle else 0.0
     quota_consumed = active_cycle.consumed_amount_gb if active_cycle else 0.0
@@ -41,7 +49,8 @@ def _build_summary(t: Terminal, db: Session) -> TerminalSummary:
     burn_metrics = AlertService.calculate_burn_rate(quota_consumed, quota_total, start_date, end_date)
     
     # Check early burn rate alert
-    config = AlertService.get_or_create_config(db)
+    if config is None:
+        config = AlertService.get_or_create_config(db)
     is_burn_alert = (
         quota_percent >= config.early_warning_percent and
         burn_metrics["days_remaining"] >= config.early_warning_days_remaining
@@ -99,7 +108,13 @@ def get_terminals(
         )
 
     terminals = query.all()
-    return [_build_summary(t, db) for t in terminals]
+    # Pre-fetch active cycles and config to prevent N+1 queries
+    active_cycles = {
+        c.service_line_number: c
+        for c in db.query(BillingCycle).filter(BillingCycle.is_active == True).all()
+    }
+    cfg = AlertService.get_or_create_config(db)
+    return [_build_summary(t, db, active_cycles, cfg) for t in terminals]
 
 @router.get("/overview", response_model=FleetOverviewResponse)
 def get_fleet_overview(db: Session = Depends(get_db)):
@@ -109,7 +124,13 @@ def get_fleet_overview(db: Session = Depends(get_db)):
     offline = total - online
     avail_pct = round((online / total * 100.0), 1) if total > 0 else 0.0
 
-    summaries = [_build_summary(t, db) for t in terminals]
+    # Bulk pre-fetch active cycles and config
+    active_cycles = {
+        c.service_line_number: c
+        for c in db.query(BillingCycle).filter(BillingCycle.is_active == True).all()
+    }
+    cfg = AlertService.get_or_create_config(db)
+    summaries = [_build_summary(t, db, active_cycles, cfg) for t in terminals]
 
     total_consumed_month = sum(s.quota_consumed_gb for s in summaries)
     total_quota_month = sum(s.quota_total_gb for s in summaries)

@@ -5,6 +5,13 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+import html
+
+def _esc(val: Any) -> str:
+    if val is None:
+        return ""
+    return html.escape(str(val), quote=False)
+
 class TelegramService:
     def __init__(self):
         self._client: Optional[httpx.AsyncClient] = None
@@ -104,9 +111,9 @@ class TelegramService:
         
         return (
             f"{icon} <b>ALERTA STARLINK: {level_title}</b> {icon}\n\n"
-            f"📍 <b>Enlace:</b> {nickname}\n"
-            f"📄 <b>Línea de Servicio:</b> <code>{service_line_number}</code>\n"
-            f"🏢 <b>Cuenta / Proyecto:</b> {account_name}\n\n"
+            f"📍 <b>Enlace:</b> {_esc(nickname)}\n"
+            f"📄 <b>Línea de Servicio:</b> <code>{_esc(service_line_number)}</code>\n"
+            f"🏢 <b>Cuenta / Proyecto:</b> {_esc(account_name)}\n\n"
             f"📊 <b>Consumo de Cuota:</b> {consumed_gb:.1f} GB / {total_gb:.0f} GB (<b>{percent:.1f}%</b>)\n"
             f"⏳ <b>Días Restantes de Ciclo:</b> {days_text}\n"
             f"📶 <b>Throughput Actual:</b> ↓ {downlink:.1f} / ↑ {uplink:.1f} Mbps | Ping: {ping:.0f} ms\n\n"
@@ -134,9 +141,9 @@ class TelegramService:
 
         return (
             f"⚡ <b>ALERTA PREVENTIVA: RITMO ACELERADO (BURN-RATE)</b> ⚡\n\n"
-            f"📍 <b>Enlace:</b> {nickname}\n"
-            f"📄 <b>Línea de Servicio:</b> <code>{service_line_number}</code>\n"
-            f"🏢 <b>Cuenta / Proyecto:</b> {account_name}\n\n"
+            f"📍 <b>Enlace:</b> {_esc(nickname)}\n"
+            f"📄 <b>Línea de Servicio:</b> <code>{_esc(service_line_number)}</code>\n"
+            f"🏢 <b>Cuenta / Proyecto:</b> {_esc(account_name)}\n\n"
             f"📈 <b>Consumo Temprano:</b> {consumed_gb:.1f} GB / {total_gb:.0f} GB (<b>{percent:.1f}%</b>)\n"
             f"⏳ <b>Días Restantes en Ciclo:</b> {days_remaining} días\n"
             f"🔥 <b>Ritmo Diario Estimado:</b> ~{daily_burn_rate:.1f} GB/día\n"
@@ -155,9 +162,9 @@ class TelegramService:
         """Format an alert when a terminal falls offline."""
         return (
             f"🔴 <b>ALERTA DE DESCONEXIÓN: ENLACE OFFLINE</b> 🔴\n\n"
-            f"📍 <b>Enlace:</b> {nickname}\n"
-            f"📄 <b>Línea de Servicio:</b> <code>{service_line_number}</code>\n"
-            f"🏢 <b>Cuenta / Proyecto:</b> {account_name}\n"
+            f"📍 <b>Enlace:</b> {_esc(nickname)}\n"
+            f"📄 <b>Línea de Servicio:</b> <code>{_esc(service_line_number)}</code>\n"
+            f"🏢 <b>Cuenta / Proyecto:</b> {_esc(account_name)}\n\n"
             f"⚠️ <b>Estado:</b> Antena fuera de línea o sin enlace satelital activo.\n\n"
             f"🔗 <a href=\"http://starlink.milicic.local\">Abrir Starlink Fleet Monitor</a>"
         )
@@ -167,7 +174,7 @@ class TelegramService:
         now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
         return (
             f"🛰️ <b>MILICIC FLEET MONITOR - MENSAJE DE PRUEBA</b> 🛰️\n\n"
-            f"✅ <b>Canal verificado:</b> {channel_name}\n"
+            f"✅ <b>Canal verificado:</b> {_esc(channel_name)}\n"
             f"📡 <b>Estado de conexión:</b> Conexión exitosa con Telegram Bot API.\n"
             f"🕒 <b>Fecha/Hora:</b> {now_str}\n\n"
             f"Este canal está listo para recibir alertas operativas y preventivas de consumo de la flota Starlink."

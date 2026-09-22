@@ -142,6 +142,10 @@ class SyncService:
                             # Fetch daily data usage for this active cycle
                             daily_data = await echo_client.get_daily_data_usage(c_id)
                             if daily_data and isinstance(daily_data, list):
+                                # Pre-fetch existing usage records for this cycle to eliminate N+1 queries
+                                existing_usages = {
+                                    u.date: u for u in self.db.query(DailyUsage).filter(DailyUsage.billing_cycle_id == c_id).all()
+                                }
                                 for day_entry in daily_data:
                                     raw_date = str(day_entry.get("date") or "")
                                     if not raw_date:
@@ -154,10 +158,7 @@ class SyncService:
                                     non_gb = float(day_entry.get("nonBillableGB") or day_entry.get("nonBillGB") or 0.0)
                                     tot_day = round(p_gb + opt_gb + std_gb + non_gb, 2)
 
-                                    usage_row = self.db.query(DailyUsage).filter(
-                                        DailyUsage.billing_cycle_id == c_id,
-                                        DailyUsage.date == day_date
-                                    ).first()
+                                    usage_row = existing_usages.get(day_date)
 
                                     if not usage_row:
                                         usage_row = DailyUsage(
@@ -166,6 +167,7 @@ class SyncService:
                                             date=day_date
                                         )
                                         self.db.add(usage_row)
+                                        existing_usages[day_date] = usage_row
 
                                     usage_row.priority_gb = p_gb
                                     usage_row.opt_in_priority_gb = opt_gb

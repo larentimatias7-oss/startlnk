@@ -127,18 +127,18 @@ class AlertService:
         alerts_generated = 0
         alerts_sent = 0
 
+        # Pre-fetch active billing cycles to eliminate N+1 queries
+        active_cycles = {
+            c.service_line_number: c
+            for c in db.query(BillingCycle).filter(BillingCycle.is_active == True).order_by(BillingCycle.id.asc()).all()
+        }
+
         for t in terminals:
             # Skip evaluation if alerts are silenced for this specific terminal
             if hasattr(t, "alerts_enabled") and t.alerts_enabled is False:
                 continue
 
-            # Find active billing cycle
-            cycle = (
-                db.query(BillingCycle)
-                .filter(BillingCycle.service_line_number == t.service_line_number, BillingCycle.is_active == True)
-                .order_by(desc(BillingCycle.id))
-                .first()
-            )
+            cycle = active_cycles.get(t.service_line_number)
 
             consumed_gb = cycle.consumed_amount_gb if cycle else 0.0
             total_gb = cycle.total_amount_gb if cycle and cycle.total_amount_gb > 0 else 1000.0
@@ -305,16 +305,17 @@ class AlertService:
         terminals = db.query(Terminal).all()
         active_alerts = []
 
+        # Pre-fetch active billing cycles to eliminate N+1 queries
+        active_cycles = {
+            c.service_line_number: c
+            for c in db.query(BillingCycle).filter(BillingCycle.is_active == True).order_by(BillingCycle.id.asc()).all()
+        }
+
         for t in terminals:
             if hasattr(t, "alerts_enabled") and t.alerts_enabled is False:
                 continue
 
-            cycle = (
-                db.query(BillingCycle)
-                .filter(BillingCycle.service_line_number == t.service_line_number, BillingCycle.is_active == True)
-                .order_by(desc(BillingCycle.id))
-                .first()
-            )
+            cycle = active_cycles.get(t.service_line_number)
             consumed_gb = cycle.consumed_amount_gb if cycle else 0.0
             total_gb = cycle.total_amount_gb if cycle and cycle.total_amount_gb > 0 else 1000.0
             percent = (consumed_gb / total_gb * 100.0) if total_gb > 0 else 0.0

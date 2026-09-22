@@ -7,13 +7,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from sqlalchemy import text
 from backend.app.core.config import settings
-from backend.app.core.database import engine, Base, SessionLocal
+from backend.app.core.database import engine, Base, SessionLocal, apply_migrations
 from backend.app.routers import terminals, health, alerts
 from backend.app.services.scheduler import start_scheduler, shutdown_scheduler
 from backend.app.services.sync_service import SyncService
 from backend.app.services.echo_client import echo_client
+from backend.app.services.telegram_service import telegram_service
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,16 +24,8 @@ logger = logging.getLogger("starlink_app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    logger.info("Initializing TSM Starlink Dashboard Database...")
-    Base.metadata.create_all(bind=engine)
-    
-    # Safe column migration for SQLite
-    with engine.connect() as conn:
-        try:
-            conn.execute(text("ALTER TABLE terminals ADD COLUMN alerts_enabled BOOLEAN DEFAULT 1"))
-            conn.commit()
-        except Exception:
-            pass # Column already exists
+    logger.info("Initializing TSM Starlink Dashboard Database and migrations...")
+    apply_migrations()
     
     # Run initial sync on startup
     logger.info("Running startup synchronization...")
@@ -53,6 +45,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     shutdown_scheduler()
     await echo_client.close()
+    await telegram_service.close()
     logger.info("Application shutdown completed.")
 
 app = FastAPI(

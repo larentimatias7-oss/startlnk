@@ -31,8 +31,15 @@ def _mask_token(tok: str) -> str:
         return f"{tok[:6]}...{tok[-4:]}"
     return "***"
 
-def _enrich_channel_schema(ch: TelegramChannel, db: Session) -> TelegramChannelSchema:
-    bot = db.query(TelegramBot).filter(TelegramBot.id == ch.bot_id).first() if ch.bot_id else None
+def _enrich_channel_schema(
+    ch: TelegramChannel,
+    db: Session,
+    bots_map: Optional[dict] = None
+) -> TelegramChannelSchema:
+    if bots_map is not None:
+        bot = bots_map.get(ch.bot_id) if ch.bot_id else None
+    else:
+        bot = db.query(TelegramBot).filter(TelegramBot.id == ch.bot_id).first() if ch.bot_id else None
     return TelegramChannelSchema(
         id=ch.id,
         name=ch.name,
@@ -215,7 +222,8 @@ def delete_telegram_bot(bot_id: int, db: Session = Depends(get_db)):
 def list_telegram_channels(db: Session = Depends(get_db)):
     """Lista todos los canales o grupos de Telegram registrados con su bot asignado."""
     channels = db.query(TelegramChannel).order_by(TelegramChannel.id.asc()).all()
-    return [_enrich_channel_schema(ch, db) for ch in channels]
+    bots_map = {b.id: b for b in db.query(TelegramBot).all()}
+    return [_enrich_channel_schema(ch, db, bots_map) for ch in channels]
 
 @router.post("/channels", response_model=TelegramChannelSchema, status_code=status.HTTP_201_CREATED)
 def create_telegram_channel(channel_data: TelegramChannelCreate, db: Session = Depends(get_db)):
@@ -291,15 +299,6 @@ async def verify_telegram_bot(req: VerifyBotRequest, db: Session = Depends(get_d
     Verifica si el Telegram Bot Token es válido consultando directamente la API getMe de Telegram.
     """
     token = req.bot_token
-    if not token or not token.strip():
-        # Fallback to default bot token if available
-        def_bot = db.query(TelegramBot).filter(TelegramBot.is_default == True, TelegramBot.is_active == True).first()
-        if def_bot:
-            token = def_bot.token
-        else:
-            cfg = alert_service.get_or_create_config(db)
-            token = cfg.telegram_bot_token
-
     if not token or not token.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
