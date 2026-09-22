@@ -37,6 +37,7 @@ class TerminalSummary(BaseModel):
     signal_quality: float
     has_public_ip: bool
     is_alert: bool
+    alerts_enabled: bool = True
     consumed_alarm: str
     
     # Active billing cycle summary

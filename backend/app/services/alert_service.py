@@ -117,6 +117,10 @@ class AlertService:
         alerts_sent = 0
 
         for t in terminals:
+            # Skip evaluation if alerts are silenced for this specific terminal
+            if hasattr(t, "alerts_enabled") and t.alerts_enabled is False:
+                continue
+
             # Find active billing cycle
             cycle = (
                 db.query(BillingCycle)

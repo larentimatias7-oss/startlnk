@@ -62,6 +62,7 @@ def _build_summary(t: Terminal, db: Session) -> TerminalSummary:
         signal_quality=t.signal_quality,
         has_public_ip=t.has_public_ip,
         is_alert=t.is_alert or is_burn_alert,
+        alerts_enabled=t.alerts_enabled if t.alerts_enabled is not None else True,
         consumed_alarm=t.consumed_alarm,
         active_cycle_id=active_cycle.id if active_cycle else None,
         billing_start_date=start_date,
@@ -306,6 +307,36 @@ async def set_opt_in(
         message=msg,
         action="opt-in" if enabled else "opt-out",
         target=service_line_number
+    )
+
+@router.post("/{device_id}/toggle-alerts", response_model=ActionResponse)
+def toggle_terminal_alerts(
+    device_id: str,
+    enabled: Optional[bool] = Query(None, description="Explicit status or toggle if None"),
+    db: Session = Depends(get_db)
+):
+    t = db.query(Terminal).filter(
+        (Terminal.id == device_id) |
+        (Terminal.device_id == device_id) |
+        (Terminal.raw_device_id == device_id.removeprefix("ut"))
+    ).first()
+
+    if not t:
+        raise HTTPException(status_code=404, detail="Terminal no encontrado")
+
+    current_val = t.alerts_enabled if t.alerts_enabled is not None else True
+    new_val = not current_val if enabled is None else enabled
+
+    t.alerts_enabled = new_val
+    db.commit()
+    db.refresh(t)
+
+    status_str = "activadas" if new_val else "silenciadas"
+    return ActionResponse(
+        success=True,
+        message=f"Alertas de Telegram {status_str} para '{t.nickname or t.device_id}'",
+        action="toggle_alerts",
+        target=t.device_id
     )
 
 @router.post("/sync", response_model=ActionResponse)

@@ -40,6 +40,7 @@ class Terminal(Base):
     is_alert = Column(Boolean, default=False)
     consumed_alarm = Column(String, default="NORMAL")
     active_alerts_json = Column(String, nullable=True)
+    alerts_enabled = Column(Boolean, default=True)
     
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

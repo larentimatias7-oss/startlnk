@@ -116,7 +116,24 @@ def test_alerts_system():
         assert "days_remaining" in sample
         assert "daily_avg_gb" in sample
         assert "is_burn_rate_alert" in sample
-        print(f"[OK] Terminal '{sample['nickname']}': Cuota: {sample['quota_consumed_percent']}%, Días Restantes: {sample['days_remaining']}, BurnAlert: {sample['is_burn_rate_alert']}")
+        assert "alerts_enabled" in sample
+        print(f"[OK] Terminal '{sample['nickname']}': Cuota: {sample['quota_consumed_percent']}%, Días Restantes: {sample['days_remaining']}, AlertsEnabled: {sample['alerts_enabled']}")
+
+        # TEST 6: Toggle Alerts por Antena
+        print("\n=== TEST 6: Toggle de Alertas en Acciones de Terminal ===")
+        dev_id = sample["device_id"]
+        resp_toggle1 = client.post(f"/api/terminals/{dev_id}/toggle-alerts")
+        assert resp_toggle1.status_code == 200
+        data1 = resp_toggle1.json()
+        assert data1["success"] is True
+        print(f"[OK] POST /api/terminals/{dev_id}/toggle-alerts: {data1['message']}")
+
+        # Revertir toggle
+        resp_toggle2 = client.post(f"/api/terminals/{dev_id}/toggle-alerts")
+        assert resp_toggle2.status_code == 200
+        data2 = resp_toggle2.json()
+        assert data2["success"] is True
+        print(f"[OK] Toggle revertido exitosamente: {data2['message']}")
 
     db.close()
     print("\n==========================================")

@@ -11,7 +11,9 @@ import {
   Clock,
   MapPin,
   Globe,
-  CheckCircle2
+  CheckCircle2,
+  Bell,
+  BellOff
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,7 +30,8 @@ export default function TerminalDetailModal({
   deviceId,
   onClose,
   onRequestReboot,
-  onRequestOptIn
+  onRequestOptIn,
+  onToggleAlerts
 }) {
   const [activeTab, setActiveTab] = useState('telemetry'); // telemetry, billing, actions
   const [detail, setDetail] = useState(null);
@@ -385,6 +388,50 @@ export default function TerminalDetailModal({
                           <Sliders className="w-3.5 h-3.5" />
                           <span>Configurar Opt-In</span>
                         </button>
+                      </div>
+
+                      {/* Alert Notification Toggle Card */}
+                      <div className="p-3.5 rounded-md bg-[#1A222B] border border-[#2D3742] flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-[#F1F5F9]">
+                            {detail.alerts_enabled !== false ? (
+                              <Bell className="w-4 h-4 text-[#38A169]" />
+                            ) : (
+                              <BellOff className="w-4 h-4 text-[#E53E3E]" />
+                            )}
+                            <span>Supervisión de Alertas</span>
+                          </div>
+                          <p className="text-[11px] text-[#94A3B8] mb-3">
+                            {detail.alerts_enabled !== false
+                              ? 'Las alertas automáticas hacia Telegram están activas para este enlace.'
+                              : 'Las alertas hacia Telegram para este enlace están silenciadas.'}
+                          </p>
+                        </div>
+                        {onToggleAlerts && (
+                          <button
+                            onClick={async () => {
+                              await onToggleAlerts(detail);
+                              setDetail(prev => prev ? ({ ...prev, alerts_enabled: !prev.alerts_enabled }) : prev);
+                            }}
+                            className={`w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${
+                              detail.alerts_enabled !== false
+                                ? 'bg-[rgba(229,62,62,0.14)] hover:bg-[#E53E3E] text-[#E53E3E] hover:text-white border-[#E53E3E]/30'
+                                : 'bg-[rgba(56,161,105,0.16)] hover:bg-[#38A169] text-[#38A169] hover:text-white border-[#38A169]/30'
+                            }`}
+                          >
+                            {detail.alerts_enabled !== false ? (
+                              <>
+                                <BellOff className="w-3.5 h-3.5" />
+                                <span>Silenciar Alertas</span>
+                              </>
+                            ) : (
+                              <>
+                                <Bell className="w-3.5 h-3.5" />
+                                <span>Activar Alertas</span>
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

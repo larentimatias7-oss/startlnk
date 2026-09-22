@@ -14,7 +14,8 @@ import {
   Clock,
   TrendingUp,
   AlertTriangle,
-  Bell
+  Bell,
+  BellOff
 } from 'lucide-react';
 
 export default function TerminalTable({
@@ -23,7 +24,8 @@ export default function TerminalTable({
   onRequestReboot,
   onRequestOptIn,
   onCopyNotice,
-  onOpenAlerts
+  onOpenAlerts,
+  onToggleAlerts
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts, burn_rate
@@ -414,6 +416,29 @@ export default function TerminalTable({
                         >
                           <Sliders className="w-3.5 h-3.5" />
                         </button>
+
+                        {/* 4. Activar / Desactivar Alertas para esta Antena */}
+                        {onToggleAlerts && (
+                          <button
+                            onClick={() => onToggleAlerts(t)}
+                            className={`p-1.5 rounded-md border transition-colors ${
+                              t.alerts_enabled !== false
+                                ? 'bg-[#141B22] hover:bg-[rgba(56,161,105,0.16)] text-[#38A169] border-[#2D3742] hover:border-[#38A169]/40'
+                                : 'bg-[rgba(229,62,62,0.14)] hover:bg-[rgba(229,62,62,0.25)] text-[#E53E3E] border-[#E53E3E]/40'
+                            }`}
+                            title={
+                              t.alerts_enabled !== false
+                                ? 'Alertas de Telegram activas para este enlace (Clic para desactivar/silenciar)'
+                                : 'Alertas de Telegram desactivadas/silenciadas (Clic para activar)'
+                            }
+                          >
+                            {t.alerts_enabled !== false ? (
+                              <Bell className="w-3.5 h-3.5" />
+                            ) : (
+                              <BellOff className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from backend.app.core.config import settings
 
@@ -12,6 +12,17 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+def apply_migrations():
+    """Applies non-destructive schema additions for existing SQLite database files."""
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE terminals ADD COLUMN alerts_enabled BOOLEAN DEFAULT 1"))
+            conn.commit()
+        except Exception:
+            pass # Column already exists or table not created yet
+
+apply_migrations()
 
 def get_db():
     db = SessionLocal()

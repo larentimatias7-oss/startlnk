@@ -89,6 +89,36 @@ export default function App() {
     });
   };
 
+  const handleToggleAlerts = async (terminal) => {
+    try {
+      const res = await fetch(`/api/terminals/${terminal.device_id}/toggle-alerts`, {
+        method: 'POST'
+      });
+      const result = await res.json();
+      if (res.ok) {
+        showToast(result.message || 'Estado de alertas actualizado', 'info');
+        // Optimistic update
+        setData(prev => {
+          if (!prev || !prev.terminals) return prev;
+          return {
+            ...prev,
+            terminals: prev.terminals.map(t =>
+              (t.device_id === terminal.device_id || t.id === terminal.id)
+                ? { ...t, alerts_enabled: !t.alerts_enabled }
+                : t
+            )
+          };
+        });
+        fetchOverview();
+      } else {
+        showToast(result.detail || 'Error al modificar alertas', 'danger');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Error de conexión al modificar alertas', 'danger');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#0F141A] text-[#F1F5F9] flex flex-col font-sans selection:bg-[#F39200]/30 selection:text-[#F1F5F9]">
       {/* Toast Notification Container */}
@@ -215,6 +245,7 @@ export default function App() {
                     onSelectTerminal={id => setSelectedTerminalId(id)}
                     onRequestReboot={handleOpenReboot}
                     onRequestOptIn={handleOpenOptIn}
+                    onToggleAlerts={handleToggleAlerts}
                     onCopyNotice={(msg) => showToast(msg, 'info')}
                     onOpenAlerts={() => setActiveView('alerts')}
                   />
@@ -256,6 +287,7 @@ export default function App() {
           onClose={() => setSelectedTerminalId(null)}
           onRequestReboot={handleOpenReboot}
           onRequestOptIn={handleOpenOptIn}
+          onToggleAlerts={handleToggleAlerts}
         />
       )}
 

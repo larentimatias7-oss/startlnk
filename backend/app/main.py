@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text
 from backend.app.core.config import settings
 from backend.app.core.database import engine, Base, SessionLocal
 from backend.app.routers import terminals, health, alerts
@@ -25,6 +26,14 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Initializing TSM Starlink Dashboard Database...")
     Base.metadata.create_all(bind=engine)
+    
+    # Safe column migration for SQLite
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE terminals ADD COLUMN alerts_enabled BOOLEAN DEFAULT 1"))
+            conn.commit()
+        except Exception:
+            pass # Column already exists
     
     # Run initial sync on startup
     logger.info("Running startup synchronization...")
