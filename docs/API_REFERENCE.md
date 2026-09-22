@@ -17,6 +17,12 @@ Esta especificación documenta exhaustivamente los endpoints REST expuestos por 
 | `POST` | [`/api/terminals/{id}/reboot`](#7-post-apiterminalsidreboot) | Control | Disparo de reinicio remoto de la antena vía Starlink Backoffice |
 | `POST` | [`/api/terminals/{sl}/opt-in`](#8-post-apiterminalsslopt-in) | Control | Conmutación de política de sobreconsumo prioritario (*Opt-In*) |
 | `POST` | [`/api/terminals/sync`](#9-post-apiterminalssync) | Ingesta | Ejecución forzada e inmediata de sincronización con TSM ECHO |
+| `GET/PUT` | [`/api/alerts/config`](#10-configuración-de-alertas-y-telegram) | Alertas | Consulta y actualización de umbrales y Telegram Bot Token |
+| `GET/POST`| [`/api/alerts/channels`](#10-configuración-de-alertas-y-telegram) | Alertas | Gestión de canales y grupos de Telegram destinatarios |
+| `POST` | [`/api/alerts/test-telegram`](#10-configuración-de-alertas-y-telegram) | Alertas | Envío de mensaje de verificación a canales de Telegram |
+| `GET` | [`/api/alerts/history`](#10-configuración-de-alertas-y-telegram) | Alertas | Bitácora de incidentes y alertas despachadas |
+| `POST` | [`/api/alerts/evaluate`](#10-configuración-de-alertas-y-telegram) | Alertas | Disparo manual de evaluación de alertas sobre la flota |
+
 
 ---
 
@@ -383,3 +389,70 @@ Dispara de forma asíncrona una sincronización forzada e inmediata contra TSM E
   "timestamp": "2026-09-21T20:32:00.000000"
 }
 ```
+
+---
+
+## 10. Configuración de Alertas y Telegram
+
+### 10.1 `GET /api/alerts/config`
+Obtiene la configuración activa del motor de alertas (umbrales de cuota, parámetros de ritmo acelerado burn-rate, cooldown y token de bot).
+
+#### Ejemplo de Respuesta:
+```json
+{
+  "id": 1,
+  "telegram_bot_token": "123456:ABC-DEF1234ghIkl-zyx",
+  "quota_threshold_percent": 80.0,
+  "quota_critical_percent": 100.0,
+  "early_warning_percent": 60.0,
+  "early_warning_days_remaining": 15,
+  "alert_on_offline": false,
+  "cooldown_hours": 12,
+  "is_enabled": true,
+  "updated_at": "2026-09-22T09:15:00.000000"
+}
+```
+
+### 10.2 `PUT /api/alerts/config`
+Actualiza parcialmente o en su totalidad los parámetros de alerta y el token del bot de Telegram.
+
+#### Payload de Ejemplo:
+```json
+{
+  "telegram_bot_token": "123456:ABC-DEF1234ghIkl-zyx",
+  "quota_threshold_percent": 85.0,
+  "early_warning_percent": 65.0,
+  "early_warning_days_remaining": 12,
+  "cooldown_hours": 24
+}
+```
+
+### 10.3 `GET /api/alerts/channels` & `POST /api/alerts/channels`
+Permite listar y registrar canales o grupos de Telegram destinatarios de las alertas.
+
+#### Payload para Crear Canal (`POST`):
+```json
+{
+  "name": "Guardia NOC Milicic",
+  "chat_id": "-100192837482",
+  "is_active": true
+}
+```
+
+### 10.4 `POST /api/alerts/test-telegram`
+Envía un mensaje de prueba con formato HTML para validar de forma instantánea que el Bot Token es válido y que el bot tiene permisos para enviar mensajes en el Chat ID seleccionado.
+
+#### Payload de Prueba:
+```json
+{
+  "chat_id": "-100192837482",
+  "custom_bot_token": null
+}
+```
+
+### 10.5 `GET /api/alerts/history`
+Retorna la bitácora de las últimas 50 alertas evaluadas y despachadas, indicando terminal, severidad (`WARNING`, `CRITICAL`), mensaje, regla activada y cantidad de canales notificados.
+
+### 10.6 `POST /api/alerts/evaluate`
+Dispara de inmediato y bajo demanda la evaluación algorítmica de toda la flota contra las reglas de cuota fija y ritmo acelerado (burn-rate), enviando las notificaciones correspondientes a los canales activos que no se encuentren en período de cooldown anti-spam.
+

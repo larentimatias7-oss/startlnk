@@ -34,6 +34,13 @@ class SyncService:
                 )
                 self.db.add(log)
                 self.db.commit()
+
+                try:
+                    from backend.app.services.alert_service import alert_service
+                    await alert_service.evaluate_and_dispatch(self.db)
+                except Exception as a_err:
+                    logger.warning(f"Alert evaluation after demo seed failed: {a_err}")
+
                 return log
             else:
                 log = SyncLog(
@@ -44,6 +51,7 @@ class SyncService:
                 self.db.add(log)
                 self.db.commit()
                 return log
+
 
         # Process live devices from ECHO
         synced_count = 0
@@ -177,7 +185,15 @@ class SyncService:
             )
             self.db.add(log)
             self.db.commit()
+
+            try:
+                from backend.app.services.alert_service import alert_service
+                await alert_service.evaluate_and_dispatch(self.db)
+            except Exception as a_err:
+                logger.warning(f"Alert evaluation after live sync failed: {a_err}")
+
             return log
+
 
         except Exception as e:
             self.db.rollback()

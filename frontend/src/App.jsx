@@ -5,6 +5,7 @@ import FleetChart from './components/FleetChart.jsx';
 import TerminalTable from './components/TerminalTable.jsx';
 import TerminalDetailModal from './components/TerminalDetailModal.jsx';
 import ActionConfirmModal from './components/ActionConfirmModal.jsx';
+import AlertConfigModal from './components/AlertConfigModal.jsx';
 import Toast from './components/Toast.jsx';
 import MilicicLogo from './components/MilicicLogo.jsx';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -20,11 +21,13 @@ export default function App() {
 
   // Modals state
   const [selectedTerminalId, setSelectedTerminalId] = useState(null);
+  const [isAlertConfigOpen, setIsAlertConfigOpen] = useState(false);
   const [actionModal, setActionModal] = useState({
     isOpen: false,
     type: 'reboot',
     target: null,
   });
+
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -98,7 +101,9 @@ export default function App() {
         isSyncing={isSyncing}
         onSync={handleManualSync}
         onRefresh={fetchOverview}
+        onOpenAlerts={() => setIsAlertConfigOpen(true)}
       />
+
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-5 space-y-5">
@@ -206,6 +211,14 @@ export default function App() {
           showToast('Instrucción enviada exitosamente al Backoffice', 'success');
         }}
       />
+
+      {/* Alert & Telegram Configuration Modal */}
+      <AlertConfigModal
+        isOpen={isAlertConfigOpen}
+        onClose={() => setIsAlertConfigOpen(false)}
+        onNotify={(msg, type) => showToast(msg, type)}
+      />
     </div>
   );
 }
+

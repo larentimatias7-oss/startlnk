@@ -19,6 +19,7 @@ from backend.app.schemas.terminal import (
 )
 from backend.app.services.echo_client import echo_client
 from backend.app.services.sync_service import SyncService
+from backend.app.services.alert_service import AlertService
 
 router = APIRouter(prefix="/terminals", tags=["terminals"])
 
@@ -35,6 +36,17 @@ def _build_summary(t: Terminal, db: Session) -> TerminalSummary:
     quota_consumed = active_cycle.consumed_amount_gb if active_cycle else 0.0
     quota_percent = active_cycle.consumed_percent if active_cycle else 0.0
 
+    start_date = active_cycle.start_date if active_cycle else None
+    end_date = active_cycle.end_date if active_cycle else None
+    burn_metrics = AlertService.calculate_burn_rate(quota_consumed, quota_total, start_date, end_date)
+    
+    # Check early burn rate alert
+    config = AlertService.get_or_create_config(db)
+    is_burn_alert = (
+        quota_percent >= config.early_warning_percent and
+        burn_metrics["days_remaining"] >= config.early_warning_days_remaining
+    )
+
     return TerminalSummary(
         id=t.id,
         device_id=t.device_id,
@@ -49,14 +61,20 @@ def _build_summary(t: Terminal, db: Session) -> TerminalSummary:
         drop_rate=t.drop_rate,
         signal_quality=t.signal_quality,
         has_public_ip=t.has_public_ip,
-        is_alert=t.is_alert,
+        is_alert=t.is_alert or is_burn_alert,
         consumed_alarm=t.consumed_alarm,
         active_cycle_id=active_cycle.id if active_cycle else None,
+        billing_start_date=start_date,
+        billing_end_date=end_date,
+        days_remaining=burn_metrics["days_remaining"],
+        daily_avg_gb=burn_metrics["daily_rate"],
+        is_burn_rate_alert=is_burn_alert,
         quota_total_gb=quota_total,
         quota_consumed_gb=quota_consumed,
         quota_consumed_percent=quota_percent,
         updated_at=t.updated_at
     )
+
 
 @router.get("", response_model=List[TerminalSummary])
 def get_terminals(

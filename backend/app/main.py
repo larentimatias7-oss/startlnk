@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import settings
 from backend.app.core.database import engine, Base, SessionLocal
-from backend.app.routers import terminals, health
+from backend.app.routers import terminals, health, alerts
 from backend.app.services.scheduler import start_scheduler, shutdown_scheduler
 from backend.app.services.sync_service import SyncService
 from backend.app.services.echo_client import echo_client
@@ -64,6 +64,7 @@ app.add_middleware(
 # Register routers
 app.include_router(health.router, prefix=settings.API_V1_PREFIX)
 app.include_router(terminals.router, prefix=settings.API_V1_PREFIX)
+app.include_router(alerts.router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/")
 def root():

@@ -181,8 +181,54 @@ A continuación se ilustra la arquitectura de interfaz de usuario implementada y
 
 ---
 
-## 4. Conclusiones y Estado de Entrega
+---
 
-1. **Objetivo Cumplido**: Se cuenta con un sistema completo, desacoplado, estéticamente sobresaliente y plenamente conectado a la API de TSM ECHO.
-2. **Cero Dependencia Bloqueante**: La arquitectura garantiza persistencia en SQLite, evitando que caídas temporales de la API upstream dejen sin servicio a los operadores.
-3. **Control Operativo**: Los comandos remotos de *Reboot* y *Data Opt-In* se encuentran securizados mediante diálogos de confirmación interactivos.
+## 4. Validación del Motor de Alertas Inteligentes, Ordenamiento y Telegram
+
+En cumplimiento del requerimiento para seguimiento interactivo de consumos, ordenamiento multimétrica y sistema de alertas multicanal vía Telegram, se validaron los siguientes componentes:
+
+### 1. Ordenamiento Interactivo Multimétrica
+- Se implementó en `TerminalTable.jsx` la capacidad de ordenar la flota ascendente y descendentemente por:
+  * **Nombre / Nickname**
+  * **Estado de Conectividad (Online / Offline)**
+  * **Throughput Instantáneo (Mbps Down + Up)**
+  * **Consumo Total del Ciclo (GB)**
+  * **Porcentaje de Cuota Utilizada (%)**
+  * **Latencia de Ping (ms)**
+  * **Días Restantes en el Ciclo de Facturación**
+- Soporte visual con indicadores de flechas (`↑` / `↓`) y selector rápido optimizado para dispositivos móviles y pantallas táctiles.
+
+### 2. Motor de Alertas con Doble Indicador (Cuota Fija & Burn-Rate)
+- **Regla 1 (Umbral Fijo)**: Detecta enlaces que alcanzan o superan el porcentaje configurado (ej. 80% advertencia, 100% crítico).
+- **Regla 2 (Burn-Rate / Ritmo Acelerado)**: Evalúa si el terminal consumió más del $X\%$ de la cuota teniendo aún $\ge Y$ días restantes en el ciclo. Calcula la tasa diaria ($GB/d$) y el tiempo proyectado hasta el agotamiento:
+  $$D_{agotamiento} = \frac{GB_{restantes}}{Tasa_{diaria}}$$
+  Si $D_{agotamiento} < D_{restantes}$, el terminal se marca con el badge `⚡ Ritmo Acelerado` y se despacha la alerta correspondiente.
+- **Ventana de Cooldown Anti-Spam**: Período de enfriamiento configurable (ej. 12 horas) para evitar la repetición incesante de mensajes en cada ciclo de sincronización.
+
+### 3. Notificaciones Multicanal vía Telegram
+- **Configuración Centralizada**:
+  * Token del Bot de Telegram configurable de forma segura.
+  * Gestión de múltiples canales/grupos de Telegram con Chat ID (`-100...`) y switch individual de activación (`is_active`).
+  * Botón interactivo de prueba para verificar entrega de mensajes en segundos.
+  * Plantillas enriquecidas con formato HTML, emojis operativos y métricas clave.
+  * Historial persistido en base de datos (`alert_events`) con estado de entrega y canales alcanzados.
+
+### 4. Pruebas Automatizadas del Motor de Alertas (`test_alerts_system.py`)
+- **Comando**:
+  ```bash
+  backend\.venv\Scripts\python.exe backend/test_alerts_system.py
+  ```
+- **Validaciones Superadas**:
+  * Inicialización del singleton `AlertConfig` y tablas asociadas en SQLite.
+  * Verificación matemática del algoritmo de Burn-Rate en casos extremos (ritmo normal vs acelerado).
+  * CRUD completo de canales de Telegram (Creación, listado, actualización, eliminación).
+  * Endpoints REST `/api/alerts/*` con códigos de respuesta HTTP 200.
+  * Enriquecimiento de `/api/terminals` con `days_remaining`, `daily_avg_gb` y `is_burn_rate_alert`.
+
+---
+
+## 5. Conclusiones y Estado de Entrega
+
+1. **Objetivo Cumplido**: Se cuenta con un sistema integral, interactivo, estéticamente alineado al manual corporativo de **Milicic**, con ordenamiento fluido de terminales y motor de alertas autónomo con despacho por Telegram.
+2. **Resiliencia Operativa**: Persistencia local en SQLite, reintentos controlados con la API upstream de TSM ECHO y aislamiento de incidentes.
+3. **Control y Seguridad**: Credenciales resguardadas fuera del repositorio Git, comandos de reinicio y opt-in asegurados mediante doble confirmación, y pruebas unitarias/integración automatizadas en el pipeline de CI/CD.

@@ -30,6 +30,7 @@ jobs:
           cd backend
           python test_backend.py
           python test_api_endpoints.py
+          python test_alerts_system.py
 
   frontend-build:
     name: Build React Frontend

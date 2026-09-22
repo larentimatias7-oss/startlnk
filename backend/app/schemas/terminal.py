@@ -41,11 +41,17 @@ class TerminalSummary(BaseModel):
     
     # Active billing cycle summary
     active_cycle_id: Optional[int] = None
+    billing_start_date: Optional[str] = None
+    billing_end_date: Optional[str] = None
+    days_remaining: Optional[int] = None
+    daily_avg_gb: Optional[float] = None
+    is_burn_rate_alert: bool = False
     quota_total_gb: float = 0.0
     quota_consumed_gb: float = 0.0
     quota_consumed_percent: float = 0.0
     
     updated_at: Optional[datetime] = None
+
 
 class TerminalDetail(TerminalSummary):
     raw_device_id: Optional[str] = None

@@ -35,7 +35,15 @@ El **TSM Starlink Fleet & Usage Monitor** es una solución Full-Stack diseñada 
 
 ### Capacidades Destacadas:
 - **Monitoreo de Flota Unificado**: Visualización del estado en línea/fuera de línea, latencia de ping, fluctuación de throughput de bajada/subida y calidad de señal.
-- **Auditoría de Consumo y Cuotas**: Cálculo dinámico del volumen de datos transferido mensual versus la cuota contratada (*Priority*, *Standard* y *Opt-In*), con alertas tempranas para enlaces que alcanzan el 80% y el 100% del umbral de servicio.
+- **Interactividad y Ordenamiento Multimétrica**: Tabla reactiva con ordenamiento ascendente/descendente configurable por cualquier métrica clave: consumo (GB / %), throughput instantáneo, latencia de ping, días restantes de ciclo y estado del terminal.
+- **Motor de Alertas Inteligente con Doble Criterio**:
+  - *Regla 1 (Umbral Fijo)*: Alerta al superar porcentajes configurables de cuota mensual (ej. 80%, 100%).
+  - *Regla 2 (Burn-Rate / Alerta Temprana)*: Detección inteligente de ritmo acelerado de consumo que agotará el paquete antes del cierre de ciclo (evalúa `% consumido` vs `días restantes del ciclo`).
+  - *Ventana de Cooldown Anti-Spam*: Evita alertas repetitivas mediante enfriamiento configurable por terminal.
+- **Notificaciones Multicanal vía Telegram**:
+  - Gestión desde la interfaz web de Token de Bot de Telegram y múltiples canales/chats con activación individual (`is_active`).
+  - Botón de prueba interactivo para validar la entrega en cada canal en tiempo real.
+  - Historial persistido de incidencias y entregas.
 - **Acciones Operativas Seguras**: Ejecución remota de reinicios de terminal (*reboot*) y conmutación de política de sobreconsumo prioritario (*Data Opt-In / Opt-Out*) con doble confirmación interactiva.
 - **Resiliencia Operativa y Offline-First**: Ingesta persistida en SQLite local mediante SQLAlchemy 2.0. En caso de corte o interrupción con el backend de TSM ECHO, el dashboard sigue respondiendo con el último snapshot histórico sin degradar la experiencia de usuario.
 
@@ -49,25 +57,29 @@ El sistema implementa una arquitectura desacoplada y reactiva:
 graph TD
     subgraph Frontend ["Frontend (SPA React 18 + Vite)"]
         UI_Head[Header & Estado Conexión ECHO]
+        UI_Alerts[Modal de Alertas & Telegram]
         UI_KPIs[Tarjetas KPI & Disponibilidad]
         UI_Chart[Gráfico Tendencia 30D Recharts]
-        UI_Table[Inventario & Filtros de Búsqueda]
+        UI_Table[Inventario, Ordenamiento & Burn-Rate]
         UI_Detail[Modal Telemetría RF & Histórico Diario]
         UI_Modals[Modales de Confirmación Reboot / Opt-In]
     end
 
     subgraph Backend ["Backend API & Ingestion (FastAPI)"]
-        API[Router REST /api/terminals & /api/health]
+        API[Routers: /api/terminals, /api/health, /api/alerts]
+        AlertsEng[Motor de Alertas: Umbral Fijo + Burn-Rate]
         Worker[Background Ingester - APScheduler cada 15m]
         Client[EchoClient Asíncrono - httpx]
         ORM[(SQLite Local - starlink_dashboard.db)]
     end
 
-    subgraph Upstream ["Plataforma TSM ECHO"]
-        ECHO_API["https://echo.tsmpatagonia.com.ar/api"]
+    subgraph External ["Servicios Externos"]
+        ECHO_API["Plataforma TSM ECHO\nhttps://echo.tsmpatagonia.com.ar/api"]
+        TG_API["Telegram Bot API\nhttps://api.telegram.org/bot<token>"]
     end
 
     UI_Head -->|HTTP /api/health| API
+    UI_Alerts -->|CRUD /api/alerts/*| API
     UI_KPIs -->|HTTP /api/terminals/overview| API
     UI_Chart -->|HTTP /api/terminals/overview| API
     UI_Table -->|HTTP /api/terminals| API
@@ -78,6 +90,9 @@ graph TD
     API --> ORM
     Worker --> ORM
     Worker --> Client
+    Worker -->|Auto-evaluar tras sincronizar| AlertsEng
+    AlertsEng --> ORM
+    AlertsEng -->|Notificar Canales Activos| TG_API
     API --> Client
     Client -->|JWT Bearer Auto-Auth| ECHO_API
 ```
@@ -335,6 +350,7 @@ Para garantizar la seguridad de las credenciales de la plataforma TSM ECHO y los
 
 ## 📡 Endpoints de la API
 
+### Flota y Telemetría
 | Método | Endpoint | Parámetros / Payload | Descripción |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/health` | Ninguno | Estado general del sistema, conexión a SQLite y conectividad ECHO |
@@ -346,6 +362,19 @@ Para garantizar la seguridad de las credenciales de la plataforma TSM ECHO y los
 | `POST`| `/api/terminals/{id}/reboot` | `id` (device_id) | Dispara orden de reinicio remoto de la antena vía Starlink Backoffice |
 | `POST`| `/api/terminals/{sl}/opt-in` | `sl` (service_line_number), `?enabled=bool` | Conmuta política de sobreconsumo prioritario (Opt-In / Opt-Out) |
 | `POST`| `/api/terminals/sync` | Ninguno | Dispara sincronización forzada e inmediata contra TSM ECHO |
+
+### Motor de Alertas & Canales Telegram
+| Método | Endpoint | Parámetros / Payload | Descripción |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/alerts/config` | Ninguno | Obtiene la configuración de umbrales, burn-rate y token del bot |
+| `PUT` | `/api/alerts/config` | `AlertConfigUpdate` (JSON) | Actualiza umbrales de cuota, días restantes y cooldown |
+| `GET` | `/api/alerts/channels` | Ninguno | Lista todos los canales de Telegram registrados con su estado |
+| `POST`| `/api/alerts/channels` | `TelegramChannelCreate` (JSON) | Da de alta un nuevo canal con nombre amigable y Chat ID |
+| `PUT` | `/api/alerts/channels/{id}` | `TelegramChannelUpdate` (JSON) | Modifica nombre, Chat ID o activa/pausa (`is_active`) un canal |
+| `DELETE`| `/api/alerts/channels/{id}`| `id` (entero) | Elimina un canal de la lista de destinatarios |
+| `POST`| `/api/alerts/test-telegram` | `TestTelegramRequest` (JSON) | Envía mensaje interactivo de prueba para verificar entrega |
+| `GET` | `/api/alerts/history` | `?limit=50` | Retorna el historial de incidentes y notificaciones despachadas |
+| `POST`| `/api/alerts/evaluate` | Ninguno | Evalúa inmediatamente toda la flota contra las reglas de alerta |
 
 Consulta la referencia detallada de endpoints con ejemplos en [`docs/API_REFERENCE.md`](file:///c:/antigravity/tsmpatagonia/docs/API_REFERENCE.md).
 
@@ -361,6 +390,9 @@ backend\.venv\Scripts\python.exe backend/test_backend.py
 
 # Validar suite completa de endpoints REST FastAPI
 backend\.venv\Scripts\python.exe backend/test_api_endpoints.py
+
+# Validar motor de alertas, reglas de burn-rate y despacho Telegram
+backend\.venv\Scripts\python.exe backend/test_alerts_system.py
 
 # O ejecutar mediante npm:
 npm.cmd run test:backend
@@ -392,33 +424,39 @@ tsmpatagonia/
 │   │   │   ├── config.py           # Configuración tipada con Pydantic Settings
 │   │   │   └── database.py         # Sesión SQLAlchemy y motor SQLite
 │   │   ├── models/
-│   │   │   └── terminal.py         # Modelos ORM (Terminal, BillingCycle, DailyUsage, SyncLog)
+│   │   │   └── terminal.py         # Modelos ORM (Terminal, Usage, AlertConfig, TelegramChannel, AlertEvent)
 │   │   ├── schemas/
-│   │   │   └── terminal.py         # Esquemas de entrada/salida Pydantic v2
+│   │   │   ├── terminal.py         # Esquemas de entrada/salida Pydantic v2 de flota
+│   │   │   └── alert.py            # Esquemas de configuración, canales y eventos de alertas
 │   │   ├── services/
 │   │   │   ├── echo_client.py      # Cliente HTTP asíncrono httpx contra TSM ECHO
-│   │   │   ├── sync_service.py     # Lógica de ingesta, saneamiento y demo seed
+│   │   │   ├── sync_service.py     # Lógica de ingesta, saneamiento, demo seed y disparo de alertas
+│   │   │   ├── alert_service.py    # Motor de evaluación de reglas (cuota fija + burn-rate) y cooldown
+│   │   │   ├── telegram_service.py # Despacho multicanal con plantillas HTML vía Telegram Bot API
 │   │   │   └── scheduler.py        # Worker de sincronización periódica APScheduler
 │   │   ├── routers/
 │   │   │   ├── terminals.py        # Controladores REST de flota, KPIs y acciones
+│   │   │   ├── alerts.py           # Controladores REST de alertas, canales y testing Telegram
 │   │   │   └── health.py           # Endpoint de salud y logs de sincronización
 │   │   └── main.py                 # Aplicación FastAPI, middleware CORS y ciclo de vida
 │   ├── Dockerfile                  # Empaquetado Docker para Backend
 │   ├── requirements.txt            # Dependencias Python
 │   ├── test_backend.py             # Prueba unitaria del motor y modelos
-│   └── test_api_endpoints.py       # Prueba de integración de endpoints REST
+│   ├── test_api_endpoints.py       # Prueba de integración de endpoints REST
+│   └── test_alerts_system.py       # Validación integral del sistema de alertas y Telegram
 ├── frontend/                       # Aplicación SPA React 18
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Header.jsx          # Barra superior con marca Milicic y sincronización
+│   │   │   ├── Header.jsx          # Barra superior con marca Milicic y botón de Alertas & Telegram
 │   │   │   ├── MilicicLogo.jsx     # Isotipo y logotipo oficial de Milicic S.A.
 │   │   │   ├── KpiCards.jsx        # 4 tarjetas de métricas críticas y alarmas
 │   │   │   ├── FleetChart.jsx      # Gráfico de área apilado (30 días de flota)
-│   │   │   ├── TerminalTable.jsx   # Tabla de inventario, buscador y badges de estado
+│   │   │   ├── TerminalTable.jsx   # Tabla de inventario interactiva, ordenamiento y badge de burn-rate
+│   │   │   ├── AlertConfigModal.jsx# Panel de configuración de Telegram, umbrales y registro de eventos
 │   │   │   ├── TerminalDetailModal.jsx # Telemetría RF y barras de consumo diario
 │   │   │   ├── ActionConfirmModal.jsx  # Modal de confirmación para Reboot y Opt-In
 │   │   │   └── Toast.jsx           # Notificaciones toast flotantes interactivas
-│   │   ├── App.jsx                 # Estado global, polling automático y vista principal
+│   │   ├── App.jsx                 # Estado global, polling automático y modales
 │   │   ├── index.css               # Estilos globales, Tailwind v3 y variables Milicic
 │   │   └── main.jsx                # Montaje de React DOM
 │   ├── Dockerfile                  # Empaquetado Docker multi-etapa con Nginx

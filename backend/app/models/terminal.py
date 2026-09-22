@@ -89,3 +89,42 @@ class SyncLog(Base):
     status = Column(String, default="SUCCESS") # SUCCESS, ERROR, WARNING
     terminals_count = Column(Integer, default=0)
     message = Column(String, nullable=True)
+
+class AlertConfig(Base):
+    __tablename__ = "alert_configs"
+
+    id = Column(Integer, primary_key=True, default=1)
+    telegram_bot_token = Column(String, nullable=True)
+    quota_threshold_percent = Column(Float, default=80.0) # Alerta cuota alcanzada
+    quota_critical_percent = Column(Float, default=100.0) # Alerta cuota agotada
+    early_warning_percent = Column(Float, default=60.0) # % temprano
+    early_warning_days_remaining = Column(Integer, default=15) # con >= N días restantes
+    alert_on_offline = Column(Boolean, default=False)
+    cooldown_hours = Column(Integer, default=12) # Horas de cooldown anti-spam
+    is_enabled = Column(Boolean, default=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class TelegramChannel(Base):
+    __tablename__ = "telegram_channels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    chat_id = Column(String, nullable=False, unique=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AlertEvent(Base):
+    __tablename__ = "alert_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    terminal_id = Column(String, index=True, nullable=False)
+    terminal_nickname = Column(String, nullable=True)
+    service_line_number = Column(String, index=True, nullable=True)
+    alert_type = Column(String, nullable=False) # QUOTA_THRESHOLD, EARLY_BURN_RATE, TERMINAL_OFFLINE
+    severity = Column(String, default="WARNING") # INFO, WARNING, CRITICAL
+    message = Column(String, nullable=False)
+    details_json = Column(String, nullable=True)
+    delivered_channels_count = Column(Integer, default=0)
+    status = Column(String, default="SENT") # SENT, FAILED, SKIPPED
+

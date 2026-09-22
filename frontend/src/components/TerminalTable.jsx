@@ -6,7 +6,14 @@ import {
   Sliders,
   Globe,
   Copy,
-  Check
+  Check,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Zap,
+  Clock,
+  TrendingUp,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function TerminalTable({
@@ -17,7 +24,9 @@ export default function TerminalTable({
   onCopyNotice
 }) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts
+  const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts, burn_rate
+  const [sortField, setSortField] = useState('quota_consumed_gb'); // default: consumo mayor a menor
+  const [sortOrder, setSortOrder] = useState('desc');
   const [copiedKey, setCopiedKey] = useState(null);
 
   const handleCopy = (text, key, e) => {
@@ -28,12 +37,24 @@ export default function TerminalTable({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      // Métricas numéricas arrancan en 'desc' (mayor a menor), texto en 'asc'
+      setSortOrder(field === 'nickname' ? 'asc' : 'desc');
+    }
+  };
+
+  // 1. Filtrado
   const filteredTerminals = useMemo(() => {
     return (terminals || []).filter(t => {
       // Status filter
       if (statusFilter === 'online' && !t.is_online) return false;
       if (statusFilter === 'offline' && t.is_online) return false;
-      if (statusFilter === 'alerts' && t.quota_consumed_percent < 80 && !t.is_alert) return false;
+      if (statusFilter === 'alerts' && t.quota_consumed_percent < 80 && !t.is_alert && !t.is_burn_rate_alert) return false;
+      if (statusFilter === 'burn_rate' && !t.is_burn_rate_alert) return false;
 
       // Search query
       if (search.trim()) {
@@ -49,12 +70,63 @@ export default function TerminalTable({
     });
   }, [terminals, search, statusFilter]);
 
+  // 2. Ordenamiento interactivo
+  const sortedTerminals = useMemo(() => {
+    const result = [...filteredTerminals];
+    result.sort((a, b) => {
+      let valA = a[sortField];
+      let valB = b[sortField];
+
+      if (sortField === 'nickname') {
+        valA = (a.nickname || a.device_id || '').toLowerCase();
+        valB = (b.nickname || b.device_id || '').toLowerCase();
+        return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      }
+
+      if (sortField === 'is_online') {
+        valA = a.is_online ? 1 : 0;
+        valB = b.is_online ? 1 : 0;
+      } else if (sortField === 'throughput') {
+        valA = a.downlink_mbps || 0;
+        valB = b.downlink_mbps || 0;
+      } else if (sortField === 'quota_consumed_gb') {
+        valA = a.quota_consumed_gb || 0;
+        valB = b.quota_consumed_gb || 0;
+      } else if (sortField === 'quota_consumed_percent') {
+        valA = a.quota_consumed_percent || 0;
+        valB = b.quota_consumed_percent || 0;
+      } else if (sortField === 'ping_ms') {
+        valA = a.is_online ? (a.ping_ms || 999) : 9999;
+        valB = b.is_online ? (b.ping_ms || 999) : 9999;
+      } else if (sortField === 'days_remaining') {
+        valA = a.days_remaining != null ? a.days_remaining : 999;
+        valB = b.days_remaining != null ? b.days_remaining : 999;
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return result;
+  }, [filteredTerminals, sortField, sortOrder]);
+
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-[#64748B] group-hover:text-[#CBD5E1] transition-colors inline ml-1 opacity-60" />;
+    }
+    return sortOrder === 'desc' ? (
+      <ArrowDown className="w-3.5 h-3.5 text-[#F39200] inline ml-1" />
+    ) : (
+      <ArrowUp className="w-3.5 h-3.5 text-[#F39200] inline ml-1" />
+    );
+  };
+
   return (
     <div className="bg-[#1A222B] border border-[#2D3742] rounded-lg overflow-hidden shadow-sm">
-      {/* Header controls: Search & Filters */}
-      <div className="p-3.5 sm:p-4 border-b border-[#2D3742] flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* Header controls: Search, Filters & Quick Sort */}
+      <div className="p-3.5 sm:p-4 border-b border-[#2D3742] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         {/* Search bar */}
-        <div className="relative w-full sm:w-80">
+        <div className="relative w-full lg:w-80">
           <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -65,69 +137,146 @@ export default function TerminalTable({
           />
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
-          {[
-            { id: 'all', label: 'Todos' },
-            { id: 'online', label: 'Online' },
-            { id: 'offline', label: 'Offline' },
-            { id: 'alerts', label: 'En Alarma' },
-          ].map(filter => {
-            const isActive = statusFilter === filter.id;
-            return (
-              <button
-                key={filter.id}
-                onClick={() => setStatusFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  isActive
-                    ? 'bg-[#F39200] text-slate-950 font-bold shadow-sm'
-                    : 'bg-[#141B22] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] border border-[#2D3742]'
-                }`}
-              >
-                {filter.label}
-              </button>
-            );
-          })}
+        {/* Filter Pills & Quick Sort */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Sort Dropdown for Mobile / Touch */}
+          <div className="flex items-center gap-1.5 bg-[#141B22] border border-[#2D3742] rounded-md px-2 py-1 text-xs">
+            <span className="text-[#64748B] text-[11px] font-medium hidden sm:inline">Ordenar:</span>
+            <select
+              value={`${sortField}-${sortOrder}`}
+              onChange={e => {
+                const [f, o] = e.target.value.split('-');
+                setSortField(f);
+                setSortOrder(o);
+              }}
+              className="bg-transparent text-xs text-[#CBD5E1] font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="quota_consumed_gb-desc" className="bg-[#1A222B] text-white">Mayor Consumo (GB ↓)</option>
+              <option value="quota_consumed_gb-asc" className="bg-[#1A222B] text-white">Menor Consumo (GB ↑)</option>
+              <option value="quota_consumed_percent-desc" className="bg-[#1A222B] text-white">Mayor % Cuota (↓)</option>
+              <option value="throughput-desc" className="bg-[#1A222B] text-white">Mayor Velocidad (↓)</option>
+              <option value="ping_ms-asc" className="bg-[#1A222B] text-white">Menor Latencia (Ping ↑)</option>
+              <option value="nickname-asc" className="bg-[#1A222B] text-white">Nombre (A → Z)</option>
+            </select>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {[
+              { id: 'all', label: 'Todos' },
+              { id: 'online', label: 'Online' },
+              { id: 'offline', label: 'Offline' },
+              { id: 'alerts', label: 'Alertas Cuota' },
+              { id: 'burn_rate', label: '⚡ Ritmo Acelerado' },
+            ].map(filter => {
+              const isActive = statusFilter === filter.id;
+              return (
+                <button
+                  key={filter.id}
+                  onClick={() => setStatusFilter(filter.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition-colors ${
+                    isActive
+                      ? 'bg-[#F39200] text-slate-950 font-bold shadow-sm'
+                      : 'bg-[#141B22] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] border border-[#2D3742]'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Table */}
+      {/* Interactive Table with Column Sort */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-[#141A20] text-[#94A3B8] uppercase tracking-wider font-semibold border-b border-[#2D3742]">
+          <thead className="bg-[#141A20] text-[#94A3B8] uppercase tracking-wider font-semibold border-b border-[#2D3742] select-none">
             <tr className="h-10">
-              <th className="py-2.5 px-4 lg:px-6">Enlace / Dispositivo</th>
-              <th className="py-2.5 px-4">Estado</th>
-              <th className="py-2.5 px-4">Throughput / Latencia</th>
-              <th className="py-2.5 px-4 min-w-[190px]">Consumo Cuota (Mes)</th>
+              {/* Enlace / Dispositivo */}
+              <th
+                onClick={() => handleSort('nickname')}
+                className="py-2.5 px-4 lg:px-6 cursor-pointer hover:text-[#F39200] transition-colors group"
+                title="Clic para ordenar alfabéticamente"
+              >
+                Enlace / Dispositivo
+                {renderSortIndicator('nickname')}
+              </th>
+
+              {/* Estado */}
+              <th
+                onClick={() => handleSort('is_online')}
+                className="py-2.5 px-4 cursor-pointer hover:text-[#F39200] transition-colors group"
+                title="Clic para ordenar por estado de conexión"
+              >
+                Estado
+                {renderSortIndicator('is_online')}
+              </th>
+
+              {/* Throughput / Latencia */}
+              <th
+                onClick={() => handleSort('throughput')}
+                className="py-2.5 px-4 cursor-pointer hover:text-[#F39200] transition-colors group"
+                title="Clic para ordenar por velocidad de bajada"
+              >
+                Throughput / Latencia
+                {renderSortIndicator('throughput')}
+              </th>
+
+              {/* Consumo Cuota (Mes) */}
+              <th
+                onClick={() => handleSort('quota_consumed_gb')}
+                className="py-2.5 px-4 min-w-[240px] cursor-pointer hover:text-[#F39200] transition-colors group"
+                title="Clic para ordenar de mayor a menor consumo"
+              >
+                Consumo Cuota (Mes)
+                {renderSortIndicator('quota_consumed_gb')}
+              </th>
+
+              {/* IP Pública */}
               <th className="py-2.5 px-4 text-center">IP Pública</th>
+
+              {/* Acciones */}
               <th className="py-2.5 px-4 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1E262F]">
-            {filteredTerminals.length === 0 ? (
+            {sortedTerminals.length === 0 ? (
               <tr>
-                <td colSpan="6" className="py-10 text-center text-[#94A3B8]">
+                <td colSpan="6" className="py-12 text-center text-[#94A3B8]">
+                  <AlertTriangle className="w-8 h-8 text-[#64748B] mx-auto mb-2 opacity-50" />
                   No se encontraron terminales con los filtros seleccionados.
                 </td>
               </tr>
             ) : (
-              filteredTerminals.map(t => {
+              sortedTerminals.map(t => {
                 const pct = t.quota_consumed_percent || 0;
                 const isWarn = pct >= 80 && pct < 100;
                 const isCrit = pct >= 100;
+                const isBurn = t.is_burn_rate_alert;
                 const copyId = `sl-${t.id}`;
 
                 return (
                   <tr
                     key={t.id}
-                    className="h-12 hover:bg-[#222C38] transition-colors group cursor-pointer"
+                    className="h-14 hover:bg-[#222C38] transition-colors group cursor-pointer"
                     onClick={() => onSelectTerminal(t.device_id)}
                   >
                     {/* 1. Terminal / Account info */}
-                    <td className="py-2 px-4 lg:px-6">
-                      <div className="font-bold text-[#F1F5F9] group-hover:text-[#F39200] transition-colors max-w-[220px] truncate">
-                        {t.nickname || t.device_id}
+                    <td className="py-2.5 px-4 lg:px-6">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-[#F1F5F9] group-hover:text-[#F39200] transition-colors max-w-[240px] truncate">
+                          {t.nickname || t.device_id}
+                        </span>
+                        {isBurn && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-[rgba(243,146,0,0.18)] text-[#F39200] border border-[#F39200]/40 animate-pulse"
+                            title="Alerta de Ritmo Acelerado: Al ritmo actual la cuota se agotará antes del cierre de ciclo"
+                          >
+                            <Zap className="w-2.5 h-2.5" />
+                            Burn-Rate
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#94A3B8]">
                         <span className="font-mono text-[#CBD5E1]">{t.service_line_number || 'Sin SL'}</span>
@@ -145,12 +294,12 @@ export default function TerminalTable({
                           </button>
                         )}
                         <span>•</span>
-                        <span className="truncate max-w-[140px]">{t.account_name || 'Milicic S.A.'}</span>
+                        <span className="truncate max-w-[150px]">{t.account_name || 'Milicic S.A.'}</span>
                       </div>
                     </td>
 
                     {/* 2. Status Badge */}
-                    <td className="py-2 px-4">
+                    <td className="py-2.5 px-4">
                       <div className="flex items-center gap-2">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold ${
                           t.is_online
@@ -164,7 +313,7 @@ export default function TerminalTable({
                     </td>
 
                     {/* 3. Throughput & Ping */}
-                    <td className="py-2 px-4">
+                    <td className="py-2.5 px-4">
                       {t.is_online ? (
                         <div className="font-mono text-[11px]">
                           <span className="text-[#3182CE] font-bold">↓ {t.downlink_mbps}</span>
@@ -177,30 +326,46 @@ export default function TerminalTable({
                       )}
                     </td>
 
-                    {/* 4. Quota Progress */}
-                    <td className="py-2 px-4">
-                      <div className="flex justify-between text-[11px] mb-1">
-                        <span className="font-mono text-[#CBD5E1]">
+                    {/* 4. Quota Progress with Daily Rate & Days Remaining */}
+                    <td className="py-2.5 px-4">
+                      <div className="flex justify-between items-baseline text-[11px] mb-1">
+                        <span className="font-mono text-[#CBD5E1] font-medium">
                           {t.quota_consumed_gb.toFixed(1)} / {t.quota_total_gb.toFixed(0)} GB
                         </span>
-                        <span className={`font-bold font-mono ${
-                          isCrit ? 'text-[#E53E3E]' : isWarn ? 'text-[#DD6B20]' : 'text-[#38A169]'
+                        <span className={`font-bold font-mono px-1.5 py-0.2 rounded text-[11px] ${
+                          isCrit
+                            ? 'bg-[rgba(229,62,62,0.18)] text-[#E53E3E] border border-[#E53E3E]/30'
+                            : isWarn
+                            ? 'bg-[rgba(221,107,32,0.18)] text-[#DD6B20] border border-[#DD6B20]/30'
+                            : 'bg-[rgba(56,161,105,0.12)] text-[#38A169]'
                         }`}>
                           {pct}%
                         </span>
                       </div>
+
+                      {/* Visual Progress Bar */}
                       <div className="w-full h-1.5 bg-[#141B22] rounded-full overflow-hidden border border-[#242D36]">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            isCrit ? 'bg-[#E53E3E]' : isWarn ? 'bg-[#DD6B20]' : 'bg-[#F39200]'
+                            isCrit ? 'bg-[#E53E3E]' : isWarn ? 'bg-[#DD6B20]' : isBurn ? 'bg-[#F39200]' : 'bg-[#38A169]'
                           }`}
                           style={{ width: `${Math.min(pct, 100)}%` }}
                         />
                       </div>
+
+                      {/* Cycle Remaining Days & Daily Average */}
+                      <div className="flex items-center justify-between text-[10px] text-[#64748B] mt-1 font-mono">
+                        <span>
+                          ⏳ Restan: <strong className="text-[#CBD5E1]">{t.days_remaining != null ? t.days_remaining : 15}d</strong>
+                        </span>
+                        <span>
+                          Ritmo: <strong className="text-[#CBD5E1]">~{t.daily_avg_gb != null ? t.daily_avg_gb.toFixed(1) : 0} GB/d</strong>
+                        </span>
+                      </div>
                     </td>
 
                     {/* 5. Public IP */}
-                    <td className="py-2 px-4 text-center">
+                    <td className="py-2.5 px-4 text-center">
                       {t.has_public_ip ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[rgba(49,130,206,0.16)] text-[#3182CE] border border-[#3182CE]/30 text-[10px] font-bold">
                           <Globe className="w-3 h-3" />
@@ -212,7 +377,7 @@ export default function TerminalTable({
                     </td>
 
                     {/* 6. Quick Actions */}
-                    <td className="py-2 px-4 text-right" onClick={e => e.stopPropagation()}>
+                    <td className="py-2.5 px-4 text-right" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onSelectTerminal(t.device_id)}
