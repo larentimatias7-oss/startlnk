@@ -1,6 +1,6 @@
 ---
 name: diseno-UI-milicic
-description: Genera y refina interfaces web modernas, componentes desacoplados y sistemas visuales corporativos siguiendo la paleta de marca y diseño de Milicic (naranja constructora, gris pizarra, blanco y modo oscuro carbón/pizarra). Úsalo cuando diseñes UI, dashboards, formularios, tablas de datos o maquetas web.
+description: Genera y refina interfaces web modernas, componentes desacoplados y sistemas visuales corporativos de alto craft siguiendo la identidad de Milicic (naranja constructora, gris pizarra, blanco y modo oscuro carbón/pizarra). Incorpora principios anti-genéricos de diseño de autor, jerarquía visual estricta y calidad de producción enterprise. Úsalo cuando diseñes UI, dashboards, consolas operativas, formularios, tablas de datos o maquetas web.
 ---
 
 # Skill: Modern Component Patterns (Milicic Design System)
@@ -176,3 +176,53 @@ Crear siempre un componente reutilizable (`MilicicLogo.jsx` o `MilicicLogo.tsx`)
   }
 }
 ```
+
+---
+
+## 6. Principios de Craft y Ejecución (Complementario)
+
+> [!IMPORTANT]
+> **Regla de Prevalencia de Marca:**
+> Estos principios de ejecución y craft derivan de estándares avanzados de diseño de interfaces y aplican **estrictamente de forma complementaria y posterior** al cumplimiento de la identidad visual de Milicic.
+> Si existiera cualquier discrepancia entre una sugerencia de diseño genérico y las reglas de este documento (paleta cromática, cuadrícula matemática de 8px, tipografía Inter/Mono, radios `rounded-md`/`rounded-lg` o altura de filas de tabla), **prevalecen siempre las especificaciones corporativas de Milicic (Secciones 1 a 5)**.
+
+### A. Erradicación de Patrones Genéricos de IA ("Anti-AI UI")
+1. **Postura Estética Intencional (*Industrial Utilitarian*):**
+   - Evitar interfaces genéricas de plantilla, efectos de vidrio sobrecargados innecesarios, bordes redondeados excesivos estilo "píldora" en tarjetas o botones estructurales, y degradados artificiales sin justificación operativa.
+   - El estilo Milicic transmite solidez técnica, ingeniería pesada y precisión. La UI debe sentirse como una consola de control de ingeniería robusta y confiable.
+2. **Ancla de Diferenciación Visual (*Differentiation Anchor*):**
+   - Una interfaz Milicic bien ejecutada debe reconocerse inmediatamente aun si se removiera el logotipo: contraste quirúrgico en modo oscuro carbón/pizarra, acentos naranjas de alta precisión en CTAs y estados clave, métricas técnicas monoespaciadas legibles y densidad de datos optimizada para monitoreo NOC.
+3. **Contención Cohesiva:**
+   - Cero decoración vacía. Cada línea, borde tenue (`#2D3742`), píldora translúcida o micro-badge debe cumplir una función informativa o de jerarquía directa.
+
+### B. Criterios de Jerarquía Visual y Ritmo
+1. **Composición Guiada por la Acción del Operador:**
+   - La vista debe comunicar en los primeros 3 segundos:
+     1. ¿Cuál es el estado general del sistema o flota? (KPIs superiores y badges de conexión).
+     2. ¿Dónde se requiere atención inmediata? (Alertas activas con badges semánticos destacados).
+     3. ¿Cuáles son las acciones prioritarias disponibles? (Filtros, búsquedas y botones CTA).
+2. **Espaciado Intencional en Cuadrícula de 8px:**
+   - El espacio vacío es una herramienta activa de agrupación semántica y descanso visual, nunca simple ausencia de contenido.
+   - Agrupar elementos fuertemente relacionados a 8px (`gap-2`), secciones internas a 16px (`p-4` / `space-y-4`) y bloques de navegación o tarjetas mayores a 24px (`p-6` / `gap-6`).
+
+### C. Microinteracciones y Movimiento con Propósito
+1. **Movimiento Racional y Eficiente:**
+   - No emplear animaciones decorativas continuas o repetitivas que generen distracción o fatiga visual en consolas operativas.
+   - Utilizar transiciones CSS nativas de respuesta rápida (`150ms` a `200ms` con `ease-in-out` o `ease-out`) para estados `:hover`, `:focus` y `:active`.
+2. **Feedback Visual Inmediato y No Bloqueante:**
+   - Durante operaciones asíncronas (evaluación de flota, reinicios, envíos de prueba), mostrar un icono animado (`animate-spin` o `animate-bounce`) dentro del botón mismo y deshabilitar el botón para evitar dobles clics.
+   - En acciones de copiado o confirmación, mutar temporalmente el icono (ej: de portapapeles a `Check` verde) antes de retornar al estado base.
+   - Respetar siempre la preferencia del sistema para usuarios con sensibilidad al movimiento (`@media (prefers-reduced-motion: reduce)`).
+
+### D. Checklist de Calidad y Robustez en Producción
+Antes de dar por concluido un componente o interfaz web:
+- [ ] **Technical Correctness:** Código limpio, modular, sin estilos muertos ni dependencias de animación innecesarias; estructurado en componentes de menos de 400-500 líneas.
+- [ ] **Gestión de Estados Críticos:**
+  - *Estado de Carga:* Skeletons o spinners sutiles sin saltos abruptos de layout (*Cumulative Layout Shift* controlado).
+  - *Estado Vacío (Empty State):* Mensaje explicativo y acción de desbloqueo cuando no hay datos (ej: "Sin canales registrados - Agrega uno a continuación").
+  - *Estado de Error:* Mensaje claro en notificación Toast o alerta inline, indicando la causa técnica sin exponer contraseñas ni stack traces sensibles.
+- [ ] **Accesibilidad y Navegación:**
+  - Contraste validado (mínimo ratio 4.5:1 para texto regular en ambos temas).
+  - Estados de foco accesibles por teclado (`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F39200]`).
+- [ ] **Responsividad Operativa:**
+  - Adaptabilidad fluida desde resoluciones móviles (390px) hasta pantallas ultrawide de centros de control, garantizando que las tablas críticas ofrezcan scroll horizontal contenido sin romper el contenedor principal.
