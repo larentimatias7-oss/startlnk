@@ -160,6 +160,8 @@ flowchart LR
   Al consultar `/api/alerts/bots`, el backend enmascara obligatoriamente los tokens de Telegram (`8899338410:AAHP...b_c8`), impidiendo que ojos indiscretos, grabaciones de pantalla o inspectores de red expongan la clave del bot.
 - **Validación Criptográfica Previa con Telegram**:
   Antes de almacenar cualquier token en el sistema, se ejecuta una llamada HTTPS efímera hacia la API `getMe` de Telegram. Si el token es inválido o no existe, es rechazado de inmediato sin persistirlo.
+- **Sanitización Anti-Inyección de Entidades HTML en Telegram (`html.escape`)**:
+  Todos los valores dinámicos provenientes de la base de datos o de APIs upstream (`nickname`, `service_line_number`, `account_name`, `channel_name`) son procesados mediante `html.escape()` antes de intercalarse en las plantillas HTML de los mensajes de Telegram. Esto neutraliza vulnerabilidades de formato e impide errores de parseo HTTP 400 provocados por caracteres especiales comunes en nombres de empresas y yacimientos (como `&`, `<`, `>`).
 
 ---
 

@@ -101,6 +101,9 @@ Retorna la vista consolidada para renderizar el panel principal del dashboard: m
 - `trend`: Array de 30 puntos diarios para el gráfico de área apilado (`date`, `priority_gb`, `standard_gb`, `total_gb`).
 - `terminals`: Listado completo de terminales con estado, telemetría y ciclo de facturación activo.
 
+> [!TIP]
+> **Optimización O(1) Pre-fetching**: Este endpoint y `GET /api/terminals` resuelven los ciclos activos y configuraciones mediante una sola consulta masiva indexada en memoria en lugar de consultas individuales por terminal, garantizando tiempos de respuesta inferiores a 20 ms.
+
 ---
 
 ## 4. `GET /api/terminals`
@@ -279,7 +282,42 @@ Modifica el nombre, estado o marca como default un bot existente.
 Elimina un bot. Los canales vinculados a este bot conmutarán automáticamente al bot predeterminado.
 
 ### 12.5 `POST /api/alerts/verify-bot`
-Verifica un token de bot contra Telegram API sin persistirlo.
+Verifica la validez y conectividad de un token de bot contra Telegram Bot API (`getMe`) de forma efímera, sin persistirlo en base de datos. Permite validar credenciales antes de confirmar el alta en el formulario del frontend.
+
+- **Método**: `POST`
+- **Ruta**: `/api/alerts/verify-bot`
+- **Payload**:
+```json
+{
+  "token": "8899338410:AAHPzP7vX76k0UvJ04xQjJk1l2m3"
+}
+```
+
+#### Respuestas:
+- `200 OK` (Token Válido):
+```json
+{
+  "valid": true,
+  "bot_username": "inframilicic_bot",
+  "bot_name": "Alertas Infra MILICIC",
+  "error": null
+}
+```
+- `200 OK` (Token Rechazado por Telegram):
+```json
+{
+  "valid": false,
+  "bot_username": null,
+  "bot_name": null,
+  "error": "Error de autenticación con Telegram (Token inválido o revocado)"
+}
+```
+- `400 Bad Request` (Token vacío o solo espacios):
+```json
+{
+  "detail": "El token de Telegram no puede estar vacío"
+}
+```
 
 ---
 

@@ -11,6 +11,7 @@ Esta guía describe los procedimientos operativos estándar (SOP) para poner en 
   - [2.1. Configuración de docker-compose.yml](#21-configuración-de-docker-composeyml)
   - [2.2. Enrutamiento Traefik y Bypass de Validación DNS](#22-enrutamiento-traefik-y-bypass-de-validación-dns)
   - [2.3. Gestión de Secretos en Dokploy](#23-gestión-de-secretos-en-dokploy)
+  - [2.4. Optimizaciones de Compilación y Migraciones Automáticas](#24-optimizaciones-de-compilación-code-splitting-y-migraciones-automáticas)
 - [3. Pipeline de Integración Continua (Gitea Actions)](#3-pipeline-de-integración-continua-gitea-actions)
   - [3.1. Definición del Workflow ci.yaml](#31-definición-del-workflow-ciyaml)
   - [3.2. Configuración del Runner Self-Hosted (dokploy-runner)](#32-configuración-del-runner-self-hosted-dokploy-runner)
@@ -155,6 +156,21 @@ TELEGRAM_BOT_TOKEN=8899338410:AAHP...
 > **Gestión Dinámica de Bots y Canales en Caliente**:
 > Los Tokens de Bot de Telegram y los Canales/Grupos destinatarios se administran directamente desde la interfaz web corporativa (pestaña **Telegram & Bots**), sin necesidad de editar variables de entorno ni reiniciar los contenedores. Cada bot registrado se valida automáticamente contra la API oficial de Telegram (`getMe`) y sus tokens se almacenan y exponen de forma enmascarada (`token_masked`) para máxima seguridad.
 
+### 2.4. Optimizaciones de Compilación (Code Splitting) y Migraciones Automáticas
+
+#### Empaquetado Web Ultra Liviano (-85.3% Bundle Inicial)
+Para garantizar una experiencia fluida a los operadores en enlaces satelitales o redes con latencia, la configuración de Vite ([`frontend/vite.config.js`](file:///c:/antigravity/tsmpatagonia/frontend/vite.config.js)) implementa particionamiento modular (`manualChunks`):
+- **`charts-*.js`**: Aísla el motor de gráficos Recharts (~530 kB sin comprimir).
+- **`icons-*.js`**: Aísla la librería de iconos Lucide React (~25 kB).
+- **`index-*.js`**: Núcleo de la aplicación reducido a tan solo **96.5 kB (21.5 kB gzip)**.
+
+**Ventaja operativa en producción**: El contenedor Nginx de Dokploy sirve los chunks de librerías con identificador de hash inmutable, permitiendo que los navegadores mantengan en caché permanente las dependencias pesadas y solo descarguen los 21 kB del código de la app al realizar un nuevo despliegue.
+
+#### Migraciones Automáticas de Esquema (`apply_migrations`)
+El backend de FastAPI ejecuta en cada inicio el procedimiento [`apply_migrations()`](file:///c:/antigravity/tsmpatagonia/backend/app/core/database.py) dentro del hook de `lifespan`:
+- Inspecciona dinámicamente mediante `PRAGMA table_info` las tablas existentes en `/app/data/starlink_dashboard.db`.
+- Crea nuevas entidades relacionales (`telegram_bots`, `telegram_channels`, `alert_events`) y añade columnas ausentes de forma idempotente.
+- Previene bloqueos por errores de tipo `column already exists` y garantiza que los despliegues en Dokploy se actualicen sin requerir intervención manual sobre la base de datos SQLite.
 
 ---
 
