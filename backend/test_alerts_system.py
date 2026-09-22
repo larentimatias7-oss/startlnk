@@ -96,6 +96,11 @@ def test_alerts_system():
     assert resp_del.status_code == 200
     print("[OK] DELETE /api/alerts/channels/{id}: Canal eliminado.")
 
+    # POST /api/alerts/verify-bot (validación de token vacío o inválido)
+    resp_v_empty = client.post("/api/alerts/verify-bot", json={})
+    assert resp_v_empty.status_code == 400
+    print("[OK] POST /api/alerts/verify-bot: Rechaza token vacío adecuadamente (HTTP 400).")
+
     # POST /api/alerts/evaluate
     resp_eval = client.post("/api/alerts/evaluate")
     assert resp_eval.status_code == 200

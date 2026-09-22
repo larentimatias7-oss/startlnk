@@ -12,6 +12,7 @@ from backend.app.schemas.alert import (
     TelegramChannelCreate,
     TelegramChannelUpdate,
     TestTelegramRequest,
+    VerifyBotRequest,
     AlertEventSchema
 )
 from backend.app.services.alert_service import alert_service
@@ -85,6 +86,30 @@ def delete_telegram_channel(channel_id: int, db: Session = Depends(get_db)):
     db.delete(channel)
     db.commit()
     return {"success": True, "message": f"Canal '{channel.name}' eliminado"}
+
+@router.post("/verify-bot")
+async def verify_telegram_bot(req: VerifyBotRequest, db: Session = Depends(get_db)):
+    """
+    Verifica si el Telegram Bot Token es válido consultando directamente la API getMe de Telegram.
+    Retorna el nombre del bot y el username (@bot).
+    """
+    config = alert_service.get_or_create_config(db)
+    token = req.bot_token or config.telegram_bot_token
+
+    if not token or not token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Por favor ingresa un Telegram Bot Token para verificar"
+        )
+
+    res = await telegram_service.verify_bot_token(token.strip())
+    if not res.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error al verificar con Telegram: {res.get('error')}"
+        )
+
+    return res
 
 @router.post("/test-telegram")
 async def test_telegram_connection(req: TestTelegramRequest, db: Session = Depends(get_db)):

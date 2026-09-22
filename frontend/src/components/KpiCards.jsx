@@ -1,7 +1,7 @@
 import React from 'react';
 import { Radio, HardDrive, Gauge, AlertOctagon, WifiOff } from 'lucide-react';
 
-export default function KpiCards({ kpis, terminals }) {
+export default function KpiCards({ kpis, terminals, onOpenAlerts }) {
   if (!kpis) return null;
 
   // Cálculos de latencia promedio y downlink agregado de terminales online
@@ -118,46 +118,60 @@ export default function KpiCards({ kpis, terminals }) {
         </div>
       </div>
 
-      {/* 4. Alertas de Cuota & Umbrales */}
-      <div className={`bg-[#1A222B] border rounded-lg p-4 transition-colors shadow-sm ${
+      {/* 4. Alertas de Cuota & Umbrales (Con Acceso Directo) */}
+      <div className={`bg-[#1A222B] border rounded-lg p-4 transition-colors shadow-sm flex flex-col justify-between ${
         kpis.terminals_in_critical > 0
           ? 'border-[#E53E3E]/60 bg-[rgba(229,62,62,0.06)]'
           : kpis.terminals_in_warning > 0
           ? 'border-[#DD6B20]/60'
           : 'border-[#2D3742]'
       }`}>
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
-            Alertas de Cuota
-          </span>
-          <div className={`p-1.5 rounded-md border ${
-            kpis.terminals_in_critical > 0
-              ? 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border-[#E53E3E]/40'
-              : 'bg-[rgba(221,107,32,0.16)] text-[#DD6B20] border-[#DD6B20]/40'
-          }`}>
-            <AlertOctagon className="w-4 h-4" />
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#94A3B8]">
+              Alertas de Cuota
+            </span>
+            <div className={`p-1.5 rounded-md border ${
+              kpis.terminals_in_critical > 0
+                ? 'bg-[rgba(229,62,62,0.16)] text-[#E53E3E] border-[#E53E3E]/40'
+                : 'bg-[rgba(221,107,32,0.16)] text-[#DD6B20] border-[#DD6B20]/40'
+            }`}>
+              <AlertOctagon className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className={`text-2xl lg:text-3xl font-black font-mono tracking-tight ${
+              kpis.terminals_in_critical > 0 ? 'text-[#E53E3E]' : kpis.terminals_in_warning > 0 ? 'text-[#DD6B20]' : 'text-[#38A169]'
+            }`}>
+              {kpis.terminals_in_critical + kpis.terminals_in_warning}
+            </span>
+            <span className="text-xs text-[#94A3B8]">enlaces en umbral</span>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2 border-t border-[#242D36] text-xs">
+            <span className="text-[#E53E3E] font-semibold font-mono">
+              {kpis.terminals_in_critical} al 100%
+            </span>
+            <span className="text-[#2D3742]">|</span>
+            <span className="text-[#DD6B20] font-semibold font-mono">
+              {kpis.terminals_in_warning} al 80%
+            </span>
           </div>
         </div>
 
-        <div className="flex items-baseline gap-2 mb-2">
-          <span className={`text-2xl lg:text-3xl font-black font-mono tracking-tight ${
-            kpis.terminals_in_critical > 0 ? 'text-[#E53E3E]' : kpis.terminals_in_warning > 0 ? 'text-[#DD6B20]' : 'text-[#38A169]'
-          }`}>
-            {kpis.terminals_in_critical + kpis.terminals_in_warning}
-          </span>
-          <span className="text-xs text-[#94A3B8]">enlaces en umbral</span>
-        </div>
-
-        <div className="flex items-center gap-3 pt-2.5 border-t border-[#242D36] text-xs">
-          <span className="text-[#E53E3E] font-semibold font-mono">
-            {kpis.terminals_in_critical} al 100%
-          </span>
-          <span className="text-[#2D3742]">|</span>
-          <span className="text-[#DD6B20] font-semibold font-mono">
-            {kpis.terminals_in_warning} al 80%
-          </span>
-        </div>
+        {/* CTA to configure alerts & telegram */}
+        {onOpenAlerts && (
+          <button
+            type="button"
+            onClick={onOpenAlerts}
+            className="mt-3 w-full py-1.5 px-2.5 rounded-md bg-[#141B22] hover:bg-[rgba(243,146,0,0.16)] text-[#CBD5E1] hover:text-[#F39200] border border-[#2D3742] hover:border-[#F39200]/40 text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+          >
+            <span>Configurar Alertas & Telegram →</span>
+          </button>
+        )}
       </div>
     </div>
   );
 }
+

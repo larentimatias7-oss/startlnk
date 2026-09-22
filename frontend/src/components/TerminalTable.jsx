@@ -13,7 +13,8 @@ import {
   Zap,
   Clock,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Bell
 } from 'lucide-react';
 
 export default function TerminalTable({
@@ -21,7 +22,8 @@ export default function TerminalTable({
   onSelectTerminal,
   onRequestReboot,
   onRequestOptIn,
-  onCopyNotice
+  onCopyNotice,
+  onOpenAlerts
 }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, online, offline, alerts, burn_rate
@@ -185,6 +187,18 @@ export default function TerminalTable({
               );
             })}
           </div>
+
+          {/* Quick Alert Config Button */}
+          {onOpenAlerts && (
+            <button
+              onClick={onOpenAlerts}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#141B22] hover:bg-[rgba(243,146,0,0.16)] text-[#CBD5E1] hover:text-[#F39200] border border-[#2D3742] hover:border-[#F39200]/40 text-xs font-semibold transition-colors shrink-0"
+              title="Configurar bots de Telegram y parámetros de alerta"
+            >
+              <Bell className="w-3.5 h-3.5 text-[#F39200]" />
+              <span className="hidden sm:inline">Configurar Alertas</span>
+            </button>
+          )}
         </div>
       </div>
 

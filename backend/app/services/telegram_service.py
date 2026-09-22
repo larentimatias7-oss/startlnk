@@ -54,6 +54,33 @@ class TelegramService:
             logger.error(f"Excepción al enviar mensaje a Telegram ({chat_id}): {str(e)}")
             return {"success": False, "error": str(e)}
 
+    async def verify_bot_token(self, bot_token: str) -> Dict[str, Any]:
+        """Verify if a Telegram Bot token is valid using Telegram's getMe API."""
+        if not bot_token or not bot_token.strip():
+            return {"success": False, "error": "Bot token vacío"}
+
+        url = f"https://api.telegram.org/bot{bot_token.strip()}/getMe"
+        try:
+            client = await self.get_client()
+            resp = await client.get(url)
+            data = resp.json()
+
+            if resp.status_code == 200 and data.get("ok"):
+                result = data.get("result", {})
+                return {
+                    "success": True,
+                    "bot_id": result.get("id"),
+                    "bot_name": result.get("first_name"),
+                    "bot_username": result.get("username"),
+                    "can_join_groups": result.get("can_join_groups", True)
+                }
+            else:
+                err_desc = data.get("description", f"HTTP {resp.status_code}")
+                return {"success": False, "error": err_desc}
+        except Exception as e:
+            logger.error(f"Excepción al verificar bot token con Telegram: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     def format_quota_alert(
         self,
         nickname: str,

@@ -2,7 +2,15 @@ import React from 'react';
 import { Satellite, RefreshCw, Activity, Bell } from 'lucide-react';
 import MilicicLogo from './MilicicLogo';
 
-export default function Header({ kpis, isSyncing, onSync, onRefresh, onOpenAlerts }) {
+export default function Header({
+  kpis,
+  isSyncing,
+  onSync,
+  onRefresh,
+  onOpenAlerts,
+  activeView,
+  onSelectView
+}) {
   return (
     <header className="border-b border-[#2D3742] bg-[#141A20] sticky top-0 z-30 px-4 lg:px-8 h-14 min-h-[56px] flex items-center shadow-md">
       <div className="max-w-7xl mx-auto w-full flex items-center justify-between gap-4">
@@ -38,36 +46,43 @@ export default function Header({ kpis, isSyncing, onSync, onRefresh, onOpenAlert
         </div>
 
         {/* Action Controls & Sync Status */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* ECHO Live Status Badge */}
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-[#1A222B] border border-[#2D3742] text-xs text-[#CBD5E1]">
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[#1A222B] border border-[#2D3742] text-xs text-[#CBD5E1]">
             <Activity className="w-3.5 h-3.5 text-[#38A169]" />
-            <span className="text-[#94A3B8] hidden md:inline">API ECHO:</span>
+            <span className="text-[#94A3B8] hidden lg:inline">API ECHO:</span>
             <span className="font-semibold text-[#38A169]">Online</span>
           </div>
 
           {/* Last Sync Timestamp */}
           {kpis?.last_sync_time && (
-            <span className="hidden xl:block text-xs text-[#94A3B8] font-mono px-2 py-1 bg-[#141B22] rounded-md border border-[#242D36]">
+            <span className="hidden xl:block text-xs text-[#94A3B8] font-mono px-2.5 py-1 bg-[#141B22] rounded-md border border-[#242D36]">
               Sync: {new Date(kpis.last_sync_time).toLocaleTimeString()}
             </span>
           )}
 
-          {/* Alerts & Telegram Settings Button */}
+          {/* Alerts & Telegram Button (Prominently styled) */}
           <button
-            onClick={onOpenAlerts}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1A222B] hover:bg-[#222C38] text-[#CBD5E1] hover:text-[#F1F5F9] border border-[#2D3742] hover:border-[#F39200]/50 text-xs font-semibold transition-colors"
-            title="Configuración de Alertas y Canales de Telegram"
+            onClick={() => {
+              if (onSelectView) onSelectView('alerts');
+              else if (onOpenAlerts) onOpenAlerts();
+            }}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all border ${
+              activeView === 'alerts'
+                ? 'bg-[#F39200] text-slate-950 border-[#F39200] shadow-sm'
+                : 'bg-[#1A222B] hover:bg-[#222C38] text-[#CBD5E1] hover:text-[#F1F5F9] border-[#2D3742] hover:border-[#F39200]/50'
+            }`}
+            title="Configurar bots de Telegram y parámetros de alertas"
           >
-            <Bell className="w-3.5 h-3.5 text-[#F39200]" />
-            <span className="hidden md:inline">Alertas & Telegram</span>
+            <Bell className={`w-3.5 h-3.5 ${activeView === 'alerts' ? 'text-slate-950' : 'text-[#F39200]'}`} />
+            <span>Alertas & Telegram</span>
           </button>
 
           {/* Sync Button */}
           <button
             onClick={onSync}
             disabled={isSyncing}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#F39200] hover:bg-[#D98200] active:bg-[#B56D00] disabled:opacity-50 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-md bg-[#F39200] hover:bg-[#D98200] active:bg-[#B56D00] disabled:opacity-50 text-slate-950 font-bold text-xs transition-colors shadow-sm"
             title="Sincronizar telemetría y consumos con TSM ECHO"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -78,4 +93,3 @@ export default function Header({ kpis, isSyncing, onSync, onRefresh, onOpenAlert
     </header>
   );
 }
-

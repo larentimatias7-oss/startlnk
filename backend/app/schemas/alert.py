@@ -46,6 +46,9 @@ class TestTelegramRequest(BaseModel):
     custom_bot_token: Optional[str] = None
     message: Optional[str] = None
 
+class VerifyBotRequest(BaseModel):
+    bot_token: Optional[str] = None
+
 class AlertEventSchema(BaseModel):
     id: int
     timestamp: datetime

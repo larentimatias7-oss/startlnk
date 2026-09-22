@@ -6,15 +6,19 @@ import TerminalTable from './components/TerminalTable.jsx';
 import TerminalDetailModal from './components/TerminalDetailModal.jsx';
 import ActionConfirmModal from './components/ActionConfirmModal.jsx';
 import AlertConfigModal from './components/AlertConfigModal.jsx';
+import AlertConfigView from './components/AlertConfigView.jsx';
 import Toast from './components/Toast.jsx';
 import MilicicLogo from './components/MilicicLogo.jsx';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, Radio, Bell } from 'lucide-react';
 
 export default function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState(null);
+
+  // Navigation View: 'fleet' (Overview/Dashboard) or 'alerts' (Telegram & Alert Rules)
+  const [activeView, setActiveView] = useState('fleet');
 
   // Toast state
   const [toast, setToast] = useState({ message: null, type: 'info' });
@@ -27,7 +31,6 @@ export default function App() {
     type: 'reboot',
     target: null,
   });
-
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -101,9 +104,47 @@ export default function App() {
         isSyncing={isSyncing}
         onSync={handleManualSync}
         onRefresh={fetchOverview}
-        onOpenAlerts={() => setIsAlertConfigOpen(true)}
+        activeView={activeView}
+        onSelectView={(view) => setActiveView(view)}
+        onOpenAlerts={() => setActiveView('alerts')}
       />
 
+      {/* Primary View Navigation Bar */}
+      <nav aria-label="Vistas Principales" className="border-b border-[#2D3742] bg-[#141B22] px-4 lg:px-8">
+        <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2">
+          <button
+            onClick={() => setActiveView('fleet')}
+            className={`flex items-center gap-2 py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all ${
+              activeView === 'fleet'
+                ? 'border-[#F39200] text-[#F39200] bg-[rgba(243,146,0,0.06)]'
+                : 'border-transparent text-[#94A3B8] hover:text-white hover:bg-[#1A222B]'
+            }`}
+          >
+            <Radio className="w-4 h-4" />
+            <span>Flota y Métricas de Enlaces</span>
+            {data?.terminals?.length > 0 && (
+              <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded-full bg-[#222C38] text-[#CBD5E1] font-mono">
+                {data.terminals.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveView('alerts')}
+            className={`flex items-center gap-2 py-3 px-3 sm:px-4 text-xs font-bold border-b-2 transition-all ${
+              activeView === 'alerts'
+                ? 'border-[#F39200] text-[#F39200] bg-[rgba(243,146,0,0.06)]'
+                : 'border-transparent text-[#94A3B8] hover:text-white hover:bg-[#1A222B]'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>Configuración de Alertas & Telegram</span>
+            <span className="hidden md:inline-block text-[10px] px-2 py-0.5 rounded-full bg-[rgba(243,146,0,0.16)] text-[#F39200] border border-[rgba(243,146,0,0.3)]">
+              Centro de Control
+            </span>
+          </button>
+        </div>
+      </nav>
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-5 space-y-5">
@@ -139,38 +180,56 @@ export default function App() {
           </div>
         )}
 
-        {loading ? (
-          <div className="py-24 text-center text-[#94A3B8] text-xs flex flex-col items-center gap-2.5">
-            <RefreshCw className="w-7 h-7 animate-spin text-[#F39200]" />
-            <span className="font-semibold text-[#F1F5F9]">Cargando flota de terminales Starlink...</span>
-          </div>
-        ) : (
+        {/* VISTA 1: FLOTA DE ENLACES Y DASHBOARD */}
+        {activeView === 'fleet' && (
           <>
-            {/* 1. Tarjetas KPI */}
-            <KpiCards kpis={data?.kpis} terminals={data?.terminals} />
-
-            {/* 2. Gráfico de Tendencia 30 Días */}
-            <FleetChart data={data?.fleet_daily_trend} />
-
-            {/* 3. Grilla de Inventario */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <h2 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
-                  Inventario de Enlaces Satelitales y Cuotas
-                </h2>
-                <span className="text-xs text-[#94A3B8] font-mono">
-                  {data?.terminals?.length || 0} terminales registradas
-                </span>
+            {loading ? (
+              <div className="py-24 text-center text-[#94A3B8] text-xs flex flex-col items-center gap-2.5">
+                <RefreshCw className="w-7 h-7 animate-spin text-[#F39200]" />
+                <span className="font-semibold text-[#F1F5F9]">Cargando flota de terminales Starlink...</span>
               </div>
-              <TerminalTable
-                terminals={data?.terminals}
-                onSelectTerminal={id => setSelectedTerminalId(id)}
-                onRequestReboot={handleOpenReboot}
-                onRequestOptIn={handleOpenOptIn}
-                onCopyNotice={(msg) => showToast(msg, 'info')}
-              />
-            </div>
+            ) : (
+              <>
+                {/* 1. Tarjetas KPI (con link directo a configurar alertas) */}
+                <KpiCards
+                  kpis={data?.kpis}
+                  terminals={data?.terminals}
+                  onOpenAlerts={() => setActiveView('alerts')}
+                />
+
+                {/* 2. Gráfico de Tendencia 30 Días */}
+                <FleetChart data={data?.fleet_daily_trend} />
+
+                {/* 3. Grilla de Inventario */}
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <h2 className="text-xs font-bold text-[#F1F5F9] uppercase tracking-wider">
+                      Inventario de Enlaces Satelitales y Cuotas
+                    </h2>
+                    <span className="text-xs text-[#94A3B8] font-mono">
+                      {data?.terminals?.length || 0} terminales registradas
+                    </span>
+                  </div>
+                  <TerminalTable
+                    terminals={data?.terminals}
+                    onSelectTerminal={id => setSelectedTerminalId(id)}
+                    onRequestReboot={handleOpenReboot}
+                    onRequestOptIn={handleOpenOptIn}
+                    onCopyNotice={(msg) => showToast(msg, 'info')}
+                    onOpenAlerts={() => setActiveView('alerts')}
+                  />
+                </div>
+              </>
+            )}
           </>
+        )}
+
+        {/* VISTA 2: CONFIGURACIÓN DE ALERTAS & TELEGRAM */}
+        {activeView === 'alerts' && (
+          <AlertConfigView
+            onNotify={(msg, type) => showToast(msg, type)}
+            isEmbedded={false}
+          />
         )}
       </main>
 
@@ -212,7 +271,7 @@ export default function App() {
         }}
       />
 
-      {/* Alert & Telegram Configuration Modal */}
+      {/* Alert & Telegram Configuration Modal (para invocación modal) */}
       <AlertConfigModal
         isOpen={isAlertConfigOpen}
         onClose={() => setIsAlertConfigOpen(false)}
@@ -221,4 +280,3 @@ export default function App() {
     </div>
   );
 }
-
