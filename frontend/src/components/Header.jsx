@@ -1,6 +1,8 @@
 import React from 'react';
-import { Satellite, RefreshCw, Activity, Bell } from 'lucide-react';
+import { Satellite, RefreshCw, Activity, Bell, ExternalLink } from 'lucide-react';
 import MilicicLogo from './MilicicLogo';
+
+const ORIGINAL_APP_URL = import.meta.env?.VITE_ECHO_APP_URL || 'https://echo.tsmpatagonia.com.ar';
 
 export default function Header({
   kpis,
@@ -77,6 +79,19 @@ export default function Header({
             <Bell className={`w-3.5 h-3.5 ${activeView === 'alerts' ? 'text-slate-950' : 'text-[#F39200]'}`} />
             <span>Alertas & Telegram</span>
           </button>
+
+          {/* Link directo a la App Original (TSM ECHO) */}
+          <a
+            href={ORIGINAL_APP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#1A222B] hover:bg-[#222C38] text-[#CBD5E1] hover:text-[#F1F5F9] border border-[#2D3742] hover:border-[#F39200]/50 text-xs font-semibold transition-all shadow-sm group"
+            title="Abrir aplicación original TSM ECHO (https://echo.tsmpatagonia.com.ar)"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#F39200] transition-colors" />
+            <span className="hidden md:inline">App Original</span>
+            <span className="md:hidden">ECHO</span>
+          </a>
 
           {/* Sync Button */}
           <button

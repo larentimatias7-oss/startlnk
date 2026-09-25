@@ -15,7 +15,8 @@ import {
   Bell,
   BellOff,
   Wifi,
-  WifiOff
+  WifiOff,
+  ExternalLink
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -109,12 +110,24 @@ export default function TerminalDetailModal({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <a
+              href="https://echo.tsmpatagonia.com.ar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#141B22] hover:bg-[#222C38] text-[#CBD5E1] hover:text-[#F1F5F9] border border-[#2D3742] hover:border-[#F39200]/50 transition-colors group"
+              title="Abrir plataforma original TSM ECHO (https://echo.tsmpatagonia.com.ar)"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#F39200] transition-colors" />
+              <span className="hidden sm:inline">App Original</span>
+            </a>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#222C38] transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}

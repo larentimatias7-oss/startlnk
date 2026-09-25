@@ -11,7 +11,7 @@ import AlertConfigModal from './components/AlertConfigModal.jsx';
 import AlertConfigView from './components/AlertConfigView.jsx';
 import Toast from './components/Toast.jsx';
 import MilicicLogo from './components/MilicicLogo.jsx';
-import { AlertCircle, RefreshCw, Radio, Bell } from 'lucide-react';
+import { AlertCircle, RefreshCw, Radio, Bell, ExternalLink } from 'lucide-react';
 
 export default function App() {
   const [data, setData] = useState(null);
@@ -368,7 +368,16 @@ export default function App() {
           <div className="flex items-center gap-3 font-mono text-[11px]">
             <span>TSM Patagonia Engine</span>
             <span className="text-[#64748B]">•</span>
-            <span className="text-[#38A169]">ECHO Connected</span>
+            <a
+              href="https://echo.tsmpatagonia.com.ar"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#38A169] hover:text-[#48BB78] hover:underline flex items-center gap-1.5 transition-colors"
+              title="Abrir plataforma original TSM ECHO"
+            >
+              <span>ECHO Connected</span>
+              <ExternalLink className="w-3 h-3 text-[#38A169]" />
+            </a>
           </div>
         </div>
       </footer>
