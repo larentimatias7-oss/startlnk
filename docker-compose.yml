@@ -16,6 +16,9 @@ services:
       - DATABASE_URL=sqlite:////app/data/starlink_dashboard.db
       - HOST=0.0.0.0
       - PORT=8000
+      - ECHO_BASE_URL=https://echo.tsmpatagonia.com.ar/api
+      - ECHO_EMAIL=it.infra@milicic.com.ar
+      - ECHO_PASSWORD=Milicic999
     networks:
       - dokploy-network
 

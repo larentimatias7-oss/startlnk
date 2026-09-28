@@ -53,6 +53,15 @@ def apply_migrations():
         except Exception:
             pass
 
+        # 4. Purge mock/demo data if present from earlier tests
+        try:
+            conn.execute(text("DELETE FROM daily_usages WHERE billing_cycle_id BETWEEN 4801 AND 4808"))
+            conn.execute(text("DELETE FROM billing_cycles WHERE id BETWEEN 4801 AND 4808"))
+            conn.execute(text("DELETE FROM terminals WHERE id LIKE 'ut01000000-%'"))
+            conn.commit()
+        except Exception:
+            pass
+
     # 4. Ensure persistent Telegram bot and channels are seeded
     try:
         from backend.app.services.telegram_persistence import seed_telegram_defaults

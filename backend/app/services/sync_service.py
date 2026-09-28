@@ -32,10 +32,25 @@ class SyncService:
         except Exception as e:
             logger.warning(f"Failed to sanitize daily usages: {e}")
 
+    def _purge_demo_data(self):
+        """Purge any mock/demo data from development testing"""
+        try:
+            demo_terms = self.db.query(Terminal).filter(Terminal.id.like("ut01000000-%")).all()
+            if demo_terms:
+                logger.info(f"Purging {len(demo_terms)} demo mock terminals from database...")
+                self.db.query(DailyUsage).filter(DailyUsage.billing_cycle_id.in_([4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808])).delete(synchronize_session=False)
+                self.db.query(BillingCycle).filter(BillingCycle.id.in_([4801, 4802, 4803, 4804, 4805, 4806, 4807, 4808])).delete(synchronize_session=False)
+                self.db.query(Terminal).filter(Terminal.id.like("ut01000000-%")).delete(synchronize_session=False)
+                self.db.commit()
+                logger.info("Demo mock data purged successfully.")
+        except Exception as e:
+            logger.warning(f"Error purging demo data: {e}")
+
     async def run_sync(self) -> SyncLog:
         """Synchronize terminals, telemetry, billing cycles, and daily usage from ECHO"""
         logger.info("Starting TSM ECHO synchronization worker...")
         self._sanitize_daily_usages()
+        self._purge_demo_data()
         
         # Check if we can fetch live data from ECHO
         raw_devices = []
@@ -43,35 +58,15 @@ class SyncService:
             raw_devices = await echo_client.get_device_lists()
 
         if not raw_devices:
-            # Check if we already have terminals in DB
             existing_count = self.db.query(Terminal).count()
-            if existing_count == 0:
-                logger.info("No live ECHO data available. Seeding initial Starlink fleet demonstration data...")
-                self._seed_demo_fleet()
-                log = SyncLog(
-                    status="SUCCESS",
-                    terminals_count=self.db.query(Terminal).count(),
-                    message="Demo fleet initialized (configure ECHO_EMAIL and ECHO_PASSWORD in .env for live sync)"
-                )
-                self.db.add(log)
-                self.db.commit()
-
-                try:
-                    from backend.app.services.alert_service import alert_service
-                    await alert_service.evaluate_and_dispatch(self.db)
-                except Exception as a_err:
-                    logger.warning(f"Alert evaluation after demo seed failed: {a_err}")
-
-                return log
-            else:
-                log = SyncLog(
-                    status="WARNING",
-                    terminals_count=existing_count,
-                    message="Using existing database snapshot (ECHO credentials not provided or offline)"
-                )
-                self.db.add(log)
-                self.db.commit()
-                return log
+            log = SyncLog(
+                status="WARNING",
+                terminals_count=existing_count,
+                message="No live ECHO data returned. Please verify ECHO_EMAIL and ECHO_PASSWORD credentials."
+            )
+            self.db.add(log)
+            self.db.commit()
+            return log
 
 
         # Process live devices from ECHO

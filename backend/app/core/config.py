@@ -9,8 +9,8 @@ class Settings(BaseSettings):
 
     # TSM ECHO Credentials
     ECHO_BASE_URL: str = "https://echo.tsmpatagonia.com.ar/api"
-    ECHO_EMAIL: str = ""
-    ECHO_PASSWORD: str = ""
+    ECHO_EMAIL: str = "it.infra@milicic.com.ar"
+    ECHO_PASSWORD: str = "Milicic999"
 
     # Database & Worker
     DATABASE_URL: str = "sqlite:///./starlink_dashboard.db"
