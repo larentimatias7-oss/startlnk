@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.core.config import settings
+from backend.app.core.database import SessionLocal, apply_migrations
 from backend.app.routers import terminals, health, alerts, terminal_actions
 from backend.app.services.scheduler import start_scheduler, shutdown_scheduler
 from backend.app.services.sync_service import SyncService
@@ -37,15 +38,17 @@ async def lifespan(app: FastAPI):
     async def _startup_sync_bg():
         await asyncio.sleep(0.5)
         logger.info("Running initial background synchronization...")
-        db = SessionLocal()
+        db = None
         try:
+            db = SessionLocal()
             service = SyncService(db)
             await service.run_sync()
             logger.info("Initial background synchronization completed.")
         except Exception as err:
             logger.error(f"Startup sync failed: {err}")
         finally:
-            db.close()
+            if db:
+                db.close()
 
     asyncio.create_task(_startup_sync_bg())
     yield
