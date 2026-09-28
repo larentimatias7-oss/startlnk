@@ -25,8 +25,8 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: tsm_starlink_frontend
     restart: unless-stopped
-    expose:
-      - "80"
+    ports:
+      - "3001:80"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.starlink-frontend.rule=Host(`172.30.15.69`) || Host(`starlink.milicic.local`)"
