@@ -2,7 +2,7 @@ import React from 'react';
 import { Timer, Clock, ShieldCheck, Zap, Check } from 'lucide-react';
 
 const SYNC_PRESETS = [5, 10, 15, 30, 60];
-const COOLDOWN_PRESETS = [4, 8, 12, 24];
+const COOLDOWN_PRESETS = [6, 12, 24, 48];
 
 export default function RulesTab({
   config,
@@ -107,7 +107,7 @@ export default function RulesTab({
             <input
               type="range"
               min="1"
-              max="24"
+              max="48"
               step="1"
               value={config.cooldown_hours}
               onChange={e => setConfig(prev => ({ ...prev, cooldown_hours: parseInt(e.target.value) }))}
@@ -128,7 +128,7 @@ export default function RulesTab({
                       : 'bg-[#222C38] text-[#94A3B8] hover:text-white'
                   }`}
                 >
-                  {h}h {h === 12 ? '(Recom.)' : ''}
+                  {h}h {h === 24 ? '(Recom.)' : ''}
                 </button>
               ))}
             </div>

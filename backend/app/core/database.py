@@ -62,6 +62,13 @@ def apply_migrations():
         except Exception:
             pass
 
+        # 5. Set default cooldown_hours to 24 if previously set to 1 or 12
+        try:
+            conn.execute(text("UPDATE alert_configs SET cooldown_hours = 24 WHERE cooldown_hours IN (1, 12) OR cooldown_hours IS NULL"))
+            conn.commit()
+        except Exception:
+            pass
+
     # 4. Ensure persistent Telegram bot and channels are seeded
     try:
         from backend.app.services.telegram_persistence import seed_telegram_defaults

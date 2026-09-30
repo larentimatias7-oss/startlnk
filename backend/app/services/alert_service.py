@@ -22,7 +22,7 @@ class AlertService:
                 early_warning_percent=60.0,
                 early_warning_days_remaining=15,
                 alert_on_offline=False,
-                cooldown_hours=12,
+                cooldown_hours=24,
                 sync_interval_minutes=15,
                 is_enabled=True
             )
@@ -93,16 +93,20 @@ class AlertService:
     ) -> bool:
         """Returns True if an alert of this type was already sent for this terminal within cooldown."""
         cutoff = datetime.utcnow() - timedelta(hours=cooldown_hours)
-        recent_alert = (
+        query = (
             db.query(AlertEvent)
             .filter(
                 AlertEvent.terminal_id == terminal_id,
-                AlertEvent.alert_type == alert_type,
                 AlertEvent.timestamp >= cutoff,
                 AlertEvent.status == "SENT"
             )
-            .first()
         )
+        if alert_type == "QUOTA_THRESHOLD":
+            query = query.filter(AlertEvent.alert_type.in_(["QUOTA_THRESHOLD", "QUOTA_CRITICAL"]))
+        else:
+            query = query.filter(AlertEvent.alert_type == alert_type)
+
+        recent_alert = query.first()
         return recent_alert is not None
 
     async def evaluate_and_dispatch(self, db: Session) -> Dict[str, Any]:
@@ -198,6 +202,7 @@ class AlertService:
             # 2. Evaluate Early Burn-Rate Alert
             # Triggers if: has_active_cycle AND Consumed % >= early_warning_percent AND days_remaining >= early_warning_days_remaining AND will_exhaust_early
             if (has_active_cycle and
+                percent < config.quota_threshold_percent and
                 percent >= config.early_warning_percent and 
                 days_remaining >= config.early_warning_days_remaining and
                 burn_metrics.get("will_exhaust_early", False)):
@@ -271,9 +276,12 @@ class AlertService:
         alert_type: str,
         severity: str,
         message: str,
-        sent_count: int
+        sent_count: int,
+        status: Optional[str] = None
     ):
+        event_status = status or ("SENT" if sent_count > 0 else "FAILED")
         event = AlertEvent(
+            timestamp=datetime.utcnow(),
             terminal_id=terminal_id,
             terminal_nickname=nickname,
             service_line_number=sl,
@@ -281,8 +289,9 @@ class AlertService:
             severity=severity,
             message=message,
             delivered_channels_count=sent_count,
-            status="SENT" if sent_count > 0 else "FAILED"
+            status=event_status
         )
+        db.add(event)
     async def test_channel_with_real_alerts(self, db: Session, channel_id: int) -> Dict[str, Any]:
         """
         Tests a specific Telegram channel by evaluating live fleet data and dispatching
@@ -397,7 +406,8 @@ class AlertService:
                     sent_count += 1
                     self._record_event(
                         db, t.id, t.nickname or t.device_id, t.service_line_number or "N/A",
-                        alert_type, severity, f"[Test Real '{channel.name}'] {summary}", 1
+                        alert_type, severity, f"[Test Real '{channel.name}'] {summary}", 1,
+                        status="TEST_SENT"
                     )
             db.commit()
             return {

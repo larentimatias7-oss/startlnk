@@ -101,7 +101,7 @@ class AlertConfig(Base):
     early_warning_percent = Column(Float, default=60.0) # % temprano
     early_warning_days_remaining = Column(Integer, default=15) # con >= N días restantes
     alert_on_offline = Column(Boolean, default=False)
-    cooldown_hours = Column(Integer, default=12) # Horas de cooldown anti-spam
+    cooldown_hours = Column(Integer, default=24) # Horas de cooldown anti-spam (24hs)
     sync_interval_minutes = Column(Integer, default=15) # Frecuencia de sincronización / evaluación
     is_enabled = Column(Boolean, default=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

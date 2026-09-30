@@ -80,7 +80,7 @@ def seed_telegram_defaults(db: Session):
                 early_warning_percent=60.0,
                 early_warning_days_remaining=15,
                 alert_on_offline=False,
-                cooldown_hours=12,
+                cooldown_hours=24,
                 sync_interval_minutes=15,
                 is_enabled=True,
             )
