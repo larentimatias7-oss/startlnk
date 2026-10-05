@@ -242,25 +242,99 @@ export default function RulesTab({
         </div>
       </div>
 
-      {/* Regla 3: Offline Alert */}
-      <div className="p-4 bg-[#141B22] border border-[#2D3742] rounded-lg flex items-center justify-between">
-        <div>
-          <span className="text-xs font-bold text-white block">Alerta por Enlace Desconectado (Offline)</span>
-          <span className="text-[11px] text-[#94A3B8]">
-            Enviar mensaje inmediato si una antena en obra pierde el enlace satelital.
-          </span>
+      {/* Regla 3: Offline Alert con Tolerancia y Recuperación */}
+      <div className="p-4 bg-[#141B22] border border-[#2D3742] rounded-lg space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-white block">Alerta por Enlace Desconectado (Offline)</span>
+            <span className="text-[11px] text-[#94A3B8]">
+              Supervisión de pérdida de enlace satelital con filtro de persistencia anti-ruido.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfig(prev => ({ ...prev, alert_on_offline: !prev.alert_on_offline }))}
+            className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
+              config.alert_on_offline ? 'bg-[#38A169]' : 'bg-[#2D3742]'
+            }`}
+          >
+            <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
+              config.alert_on_offline ? 'translate-x-5' : 'translate-x-0'
+            }`} />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setConfig(prev => ({ ...prev, alert_on_offline: !prev.alert_on_offline }))}
-          className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${
-            config.alert_on_offline ? 'bg-[#38A169]' : 'bg-[#2D3742]'
-          }`}
-        >
-          <span className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${
-            config.alert_on_offline ? 'translate-x-5' : 'translate-x-0'
-          }`} />
-        </button>
+
+        {config.alert_on_offline && (
+          <div className="pt-3 border-t border-[#2D3742] space-y-4">
+            {/* Ventana de tolerancia */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-[#CBD5E1] font-semibold">Ventana de Tolerancia Sostenida:</span>
+                <span className="text-[#F39200] font-mono font-bold text-sm">
+                  {config.offline_grace_minutes ?? 15} minutos
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="60"
+                step="1"
+                value={config.offline_grace_minutes ?? 15}
+                onChange={e => setConfig(prev => ({ ...prev, offline_grace_minutes: parseInt(e.target.value) }))}
+                className="w-full accent-[#F39200] cursor-pointer"
+              />
+              <div className="flex justify-between items-center mt-2 text-[10px] text-[#94A3B8]">
+                <span>1 min (Inmediato)</span>
+                <div className="flex gap-1.5">
+                  {[5, 10, 15, 30, 45].map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setConfig(prev => ({ ...prev, offline_grace_minutes: m }))}
+                      className={`px-2 py-0.5 rounded font-mono text-[10px] border transition-colors ${
+                        (config.offline_grace_minutes ?? 15) === m
+                          ? 'bg-[#F39200]/20 text-[#F39200] border-[#F39200]/50 font-bold'
+                          : 'bg-[#222C38] text-[#94A3B8] border-[#2D3742] hover:text-white'
+                      }`}
+                    >
+                      {m}m
+                    </button>
+                  ))}
+                </div>
+                <span>60 min</span>
+              </div>
+
+              {/* Informative Note */}
+              <div className="mt-3 p-2.5 rounded bg-[#1A222B] border border-[#F39200]/20 flex items-start gap-2">
+                <span className="text-[#F39200] text-sm shrink-0">💡</span>
+                <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+                  <strong className="text-white">Filtro para sitios remotos y cordilleranos:</strong> Las antenas en Veladero, Sierra Grande o Barda del Medio sufren micro-cortes transitorios naturales por conmutación satelital, ráfagas de viento o nieve. Establecer una tolerancia de <strong>{config.offline_grace_minutes ?? 15} min</strong> descarta falsos positivos y solo avisa ante caídas reales sostenidas.
+                </p>
+              </div>
+            </div>
+
+            {/* Sub-regla: Alerta de Restablecimiento / Recovery */}
+            <div className="flex items-center justify-between pt-2 border-t border-[#2D3742]/50">
+              <div>
+                <span className="text-xs font-semibold text-white block">Aviso de Enlace Restablecido (Online)</span>
+                <span className="text-[11px] text-[#94A3B8]">
+                  Notifica en Telegram cuando el enlace vuelve a estar operativo, detallando la duración del corte.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfig(prev => ({ ...prev, alert_on_recovery: !prev.alert_on_recovery }))}
+                className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
+                  config.alert_on_recovery !== false ? 'bg-[#38A169]' : 'bg-[#2D3742]'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 bg-white w-4 h-4 rounded-full transition-transform ${
+                  config.alert_on_recovery !== false ? 'translate-x-4' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Action Save Bar */}

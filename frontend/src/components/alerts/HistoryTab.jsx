@@ -32,13 +32,15 @@ export default function HistoryTab({ history, evaluating, onEvaluateNow }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    item.severity === 'CRITICAL'
+                    item.alert_type === 'TERMINAL_ONLINE'
+                      ? 'bg-[rgba(56,161,105,0.18)] text-[#38A169] border border-[#38A169]/40'
+                      : item.alert_type === 'TERMINAL_OFFLINE' || item.severity === 'CRITICAL'
                       ? 'bg-[rgba(229,62,62,0.18)] text-[#E53E3E] border border-[#E53E3E]/40'
                       : item.alert_type === 'EARLY_BURN_RATE'
                       ? 'bg-[rgba(243,146,0,0.18)] text-[#F39200] border border-[#F39200]/40'
                       : 'bg-[rgba(221,107,32,0.18)] text-[#DD6B20] border border-[#DD6B20]/40'
                   }`}>
-                    {item.alert_type}
+                    {item.alert_type === 'TERMINAL_ONLINE' ? 'ONLINE (RECUPERADO)' : item.alert_type}
                   </span>
                   <span className="font-bold text-white truncate">{item.terminal_nickname || item.terminal_id}</span>
                 </div>

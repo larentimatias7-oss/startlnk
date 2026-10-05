@@ -157,15 +157,70 @@ class TelegramService:
         nickname: str,
         service_line_number: str,
         account_name: str,
-        ping: float
+        ping: Optional[float] = None,
+        offline_since: Optional[datetime] = None,
+        duration_minutes: Optional[int] = None,
+        grace_minutes: int = 15
     ) -> str:
-        """Format an alert when a terminal falls offline."""
+        """Format an alert when a terminal falls offline for a sustained period exceeding grace window."""
+        if duration_minutes is not None:
+            if duration_minutes >= 60:
+                hours = duration_minutes // 60
+                mins = duration_minutes % 60
+                dur_str = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+            else:
+                dur_str = f"{duration_minutes} min"
+            duration_line = f"⏱️ <b>Tiempo fuera de línea:</b> {dur_str} (sostenido > {grace_minutes} min)\n"
+        else:
+            duration_line = f"⏱️ <b>Tiempo fuera de línea:</b> > {grace_minutes} min continuos\n"
+
+        since_line = ""
+        if offline_since:
+            since_str = offline_since.strftime("%Y-%m-%d %H:%M UTC")
+            since_line = f"🕒 <b>Corte detectado:</b> {since_str}\n"
+
         return (
             f"🔴 <b>ALERTA DE DESCONEXIÓN: ENLACE OFFLINE</b> 🔴\n\n"
             f"📍 <b>Enlace:</b> {_esc(nickname)}\n"
             f"📄 <b>Línea de Servicio:</b> <code>{_esc(service_line_number)}</code>\n"
             f"🏢 <b>Cuenta / Proyecto:</b> {_esc(account_name)}\n\n"
-            f"⚠️ <b>Estado:</b> Antena fuera de línea o sin enlace satelital activo.\n\n"
+            f"{duration_line}"
+            f"{since_line}"
+            f"⚠️ <b>Estado:</b> Antena fuera de línea o sin enlace satelital activo.\n"
+            f"💡 <i>Interrupción confirmada mayor a la ventana de tolerancia ({grace_minutes}m). Se filtraron micro-cortes transitorios.</i>\n\n"
+            f"🔗 <a href=\"http://starlink.milicic.local\">Abrir Starlink Fleet Monitor</a>"
+        )
+
+    def format_recovery_alert(
+        self,
+        nickname: str,
+        service_line_number: str,
+        account_name: str,
+        downtime_minutes: Optional[int] = None,
+        ping: Optional[float] = None
+    ) -> str:
+        """Format a notification when a previously offline terminal restores connectivity."""
+        if downtime_minutes is not None:
+            if downtime_minutes >= 60:
+                hours = downtime_minutes // 60
+                mins = downtime_minutes % 60
+                dur_str = f"{hours}h {mins}m" if mins > 0 else f"{hours}h"
+            else:
+                dur_str = f"{downtime_minutes} min"
+            duration_line = f"⏱️ <b>Duración del corte:</b> {dur_str}\n"
+        else:
+            duration_line = ""
+
+        ping_str = f" (Latencia: {ping:.0f} ms)" if ping and ping > 0 else ""
+
+        return (
+            f"🟢 <b>ENLACE RESTABLECIDO: ENLACE ONLINE</b> 🟢\n\n"
+            f"📍 <b>Enlace:</b> {_esc(nickname)}\n"
+            f"📄 <b>Línea de Servicio:</b> <code>{_esc(service_line_number)}</code>\n"
+            f"🏢 <b>Cuenta / Proyecto:</b> {_esc(account_name)}\n\n"
+            f"{duration_line}"
+            f"📡 <b>Estado:</b> Señal satelital restablecida y terminal transmitiendo{ping_str}.\n"
+            f"🕒 <b>Fecha/Hora:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n\n"
             f"🔗 <a href=\"http://starlink.milicic.local\">Abrir Starlink Fleet Monitor</a>"
         )
 

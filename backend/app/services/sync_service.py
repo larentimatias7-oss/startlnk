@@ -97,14 +97,29 @@ class SyncService:
                 terminal.kit_serial = d.get("kitSerial")
                 terminal.service_line_number = sl_num
                 terminal.account_name = d.get("accountName")
-                terminal.is_online = bool(d.get("isOnline"))
+                is_online = bool(d.get("isOnline"))
+                now_utc = datetime.utcnow()
+                if is_online != terminal.is_online:
+                    terminal.is_online = is_online
+                    if not is_online:
+                        terminal.offline_since = now_utc
+                        terminal.offline_alert_sent = False
+                    else:
+                        terminal.last_online_at = now_utc
+                elif is_online:
+                    terminal.last_online_at = now_utc
+                elif not is_online and not terminal.offline_since:
+                    terminal.offline_since = now_utc
+                    terminal.offline_alert_sent = False
+
+                terminal.is_online = is_online
                 list_dl = float(d.get("downlink") or 0.0)
                 if list_dl > 0 or terminal.downlink_mbps is None:
                     terminal.downlink_mbps = list_dl
                 terminal.ping_ms = float(d.get("ping") or 0.0)
                 terminal.is_alert = bool(d.get("isAlert"))
                 terminal.consumed_alarm = str(d.get("DBconsumedAlarm") or "NORMAL")
-                terminal.updated_at = datetime.utcnow()
+                terminal.updated_at = now_utc
 
                 # Telemetry detail
                 try:

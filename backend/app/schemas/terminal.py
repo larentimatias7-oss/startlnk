@@ -51,6 +51,11 @@ class TerminalSummary(BaseModel):
     quota_consumed_gb: float = 0.0
     quota_consumed_percent: float = 0.0
     
+    # Offline duration and state
+    last_online_at: Optional[datetime] = None
+    offline_since: Optional[datetime] = None
+    offline_duration_minutes: Optional[int] = None
+
     updated_at: Optional[datetime] = None
 
 

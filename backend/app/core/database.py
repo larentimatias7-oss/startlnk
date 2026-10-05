@@ -69,6 +69,44 @@ def apply_migrations():
         except Exception:
             pass
 
+        # 6. Terminal offline tracking columns
+        for col_def in [
+            "last_online_at TIMESTAMP",
+            "offline_since TIMESTAMP",
+            "offline_alert_sent BOOLEAN DEFAULT 0",
+            "last_offline_alert_at TIMESTAMP"
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE terminals ADD COLUMN {col_def}"))
+                conn.commit()
+            except Exception:
+                pass
+
+        # 7. AlertConfig offline grace and recovery columns
+        for col_def in [
+            "offline_grace_minutes INTEGER DEFAULT 15",
+            "alert_on_recovery BOOLEAN DEFAULT 1"
+        ]:
+            try:
+                conn.execute(text(f"ALTER TABLE alert_configs ADD COLUMN {col_def}"))
+                conn.commit()
+            except Exception:
+                pass
+
+        # 8. Initialize offline_since and offline_alert_sent for existing offline terminals
+        try:
+            # If a terminal is already offline, set offline_since to updated_at or now,
+            # and mark offline_alert_sent = 1 if it already received an alert recently to prevent boot-up spam
+            conn.execute(text("""
+                UPDATE terminals 
+                SET offline_since = COALESCE(updated_at, CURRENT_TIMESTAMP),
+                    offline_alert_sent = 1
+                WHERE is_online = 0 AND offline_since IS NULL
+            """))
+            conn.commit()
+        except Exception:
+            pass
+
     # 4. Ensure persistent Telegram bot and channels are seeded
     try:
         from backend.app.services.telegram_persistence import seed_telegram_defaults

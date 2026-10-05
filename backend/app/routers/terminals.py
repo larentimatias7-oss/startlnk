@@ -60,6 +60,10 @@ def _build_summary(
         burn_metrics.get("will_exhaust_early", False)
     )
 
+    offline_dur = None
+    if not t.is_online and t.offline_since:
+        offline_dur = max(0, int((datetime.utcnow() - t.offline_since).total_seconds() // 60))
+
     return TerminalSummary(
         id=t.id,
         device_id=t.device_id,
@@ -68,6 +72,9 @@ def _build_summary(
         service_line_number=t.service_line_number,
         account_name=t.account_name,
         is_online=t.is_online,
+        last_online_at=t.last_online_at,
+        offline_since=t.offline_since,
+        offline_duration_minutes=offline_dur,
         downlink_mbps=t.downlink_mbps,
         uplink_mbps=t.uplink_mbps,
         ping_ms=t.ping_ms,

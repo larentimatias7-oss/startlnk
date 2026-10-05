@@ -135,9 +135,74 @@ def test_alerts_system():
         assert data2["success"] is True
         print(f"[OK] Toggle revertido exitosamente: {data2['message']}")
 
+    # TEST 7: Filtro de Tolerancia 15 Minutos y Recuperación (Recovery)
+    print("\n=== TEST 7: Filtro de Tolerancia (15 min) y Notificación de Recuperación ===")
+    from datetime import datetime, timedelta
+    from backend.app.services.alert_service import alert_service
+    from backend.app.models.terminal import Terminal
+
+    cfg = alert_service.get_or_create_config(db)
+    cfg.alert_on_offline = True
+    cfg.offline_grace_minutes = 15
+    cfg.alert_on_recovery = True
+    db.commit()
+
+    # Terminal de prueba
+    test_term_id = "test-terminal-grace-15"
+    db.query(Terminal).filter(Terminal.id == test_term_id).delete()
+    db.commit()
+
+    t_test = Terminal(
+        id=test_term_id,
+        device_id=test_term_id,
+        nickname="Antena Obra Veladero Test",
+        service_line_number="SL-TEST-9999",
+        account_name="ARGENTINA",
+        is_online=False,
+        offline_since=datetime.utcnow() - timedelta(minutes=5), # Solo 5 minutos offline
+        offline_alert_sent=False
+    )
+    db.add(t_test)
+    db.commit()
+
+    # Caso 1: 5 minutos offline (< 15 min de tolerancia) -> NO debe alertar
+    import asyncio
+    res_5m = asyncio.run(alert_service.evaluate_offline_and_recovery(db, cfg, [t_test]))
+    assert res_5m["alerts_generated"] == 0
+    assert t_test.offline_alert_sent is False
+    print(f"[OK] Caso 5 min (<15m): Descartado exitosamente como micro-corte transitorio (0 alertas generadas).")
+
+    # Caso 2: 18 minutos offline (>= 15 min de tolerancia) -> DEBE alertar
+    t_test.offline_since = datetime.utcnow() - timedelta(minutes=18)
+    db.commit()
+
+    res_18m = asyncio.run(alert_service.evaluate_offline_and_recovery(db, cfg, [t_test]))
+    assert res_18m["alerts_generated"] == 1
+    assert t_test.offline_alert_sent is True
+    print(f"[OK] Caso 18 min (>=15m): Alerta de desconexión sostenida generada correctamente.")
+
+    # Caso 3: Repetición mientras sigue offline -> NO debe spamear
+    res_repeat = asyncio.run(alert_service.evaluate_offline_and_recovery(db, cfg, [t_test]))
+    assert res_repeat["alerts_generated"] == 0
+    print(f"[OK] Re-evaluación en estado offline: Anti-spam verificado (0 alertas duplicadas).")
+
+    # Caso 4: Enlace se restablece (is_online = True) -> DEBE emitir alerta de recuperación
+    t_test.is_online = True
+    db.commit()
+
+    res_rec = asyncio.run(alert_service.evaluate_offline_and_recovery(db, cfg, [t_test]))
+    assert res_rec["alerts_generated"] == 1
+    assert t_test.offline_alert_sent is False
+    assert t_test.offline_since is None
+    print(f"[OK] Restablecimiento de enlace: Alerta de recuperación (TERMINAL_ONLINE) despachada exitosamente.")
+
+    # Limpiar terminal de prueba
+    db.query(Terminal).filter(Terminal.id == test_term_id).delete()
+    db.commit()
+
     db.close()
     print("\n==========================================")
-    print("[OK] TODOS LOS TESTS DE ALERTAS Y TELEGRAM PASARON EXITOSAMENTE!")
+    print("[OK] TODOS LOS TESTS DE ALERTAS Y TOLERANCIA PASARON EXITOSAMENTE!")
     print("==========================================")
 
 

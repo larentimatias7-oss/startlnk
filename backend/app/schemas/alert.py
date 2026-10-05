@@ -10,7 +10,9 @@ class AlertConfigSchema(BaseModel):
     early_warning_percent: float = 60.0
     early_warning_days_remaining: int = 15
     alert_on_offline: bool = False
-    cooldown_hours: int = 12
+    offline_grace_minutes: int = 15
+    alert_on_recovery: bool = True
+    cooldown_hours: int = 24
     sync_interval_minutes: int = 15
     is_enabled: bool = True
     updated_at: Optional[datetime] = None
@@ -22,6 +24,8 @@ class AlertConfigUpdate(BaseModel):
     early_warning_percent: Optional[float] = None
     early_warning_days_remaining: Optional[int] = None
     alert_on_offline: Optional[bool] = None
+    offline_grace_minutes: Optional[int] = None
+    alert_on_recovery: Optional[bool] = None
     cooldown_hours: Optional[int] = None
     sync_interval_minutes: Optional[int] = None
     is_enabled: Optional[bool] = None

@@ -22,6 +22,8 @@ class AlertService:
                 early_warning_percent=60.0,
                 early_warning_days_remaining=15,
                 alert_on_offline=False,
+                offline_grace_minutes=15,
+                alert_on_recovery=True,
                 cooldown_hours=24,
                 sync_interval_minutes=15,
                 is_enabled=True
@@ -223,26 +225,145 @@ class AlertService:
                     )
                     alerts_sent += 1
 
-            # 3. Evaluate Offline Alert (if enabled)
-            if config.alert_on_offline and not t.is_online:
-                alert_type = "TERMINAL_OFFLINE"
-                if not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
-                    alerts_generated += 1
-                    msg = telegram_service.format_offline_alert(nickname, sl, account, t.ping_ms)
-                    sent_count = await self._broadcast(db, channels, msg, fallback_token)
-                    self._record_event(
-                        db, t.id, nickname, sl, alert_type, "WARNING",
-                        f"Enlace desconectado: {nickname} pasó a Offline",
-                        sent_count
-                    )
-                    alerts_sent += 1
-
         db.commit()
+
+        # 3. Evaluate Offline & Recovery alerts with sustained grace period (e.g. 15 min)
+        if config.alert_on_offline:
+            off_res = await self.evaluate_offline_and_recovery(
+                db=db,
+                config=config,
+                terminals=terminals,
+                channels=channels,
+                fallback_token=fallback_token
+            )
+            alerts_generated += off_res.get("alerts_generated", 0)
+            alerts_sent += off_res.get("alerts_sent", 0)
+
         return {
             "status": "COMPLETED",
             "alerts_generated": alerts_generated,
             "alerts_sent": alerts_sent,
             "channels_active": len(channels)
+        }
+
+    async def evaluate_offline_and_recovery(
+        self,
+        db: Session,
+        config: Optional[AlertConfig] = None,
+        terminals: Optional[Any] = None,
+        channels: Optional[List[TelegramChannel]] = None,
+        fallback_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Evaluates offline persistence against the grace period window (default 15 min)
+        and sends recovery notifications when a previously alerted offline terminal comes back online.
+        """
+        if config is None:
+            config = self.get_or_create_config(db)
+
+        if not config.is_enabled:
+            return {"status": "SKIPPED", "message": "Alertas deshabilitadas globalmente"}
+
+        if not config.alert_on_offline:
+            return {"status": "SKIPPED", "message": "Alerta de enlace offline desactivada"}
+
+        if channels is None:
+            channels = db.query(TelegramChannel).filter(TelegramChannel.is_active == True).all()
+
+        if not channels:
+            return {"status": "SKIPPED", "message": "No hay canales de Telegram activos"}
+
+        if fallback_token is None:
+            from backend.app.models.terminal import TelegramBot
+            active_bots = db.query(TelegramBot).filter(TelegramBot.is_active == True).all()
+            fallback_token = config.telegram_bot_token
+            if not active_bots and not fallback_token:
+                return {"status": "SKIPPED", "message": "No hay bots de Telegram disponibles"}
+
+        if terminals is None:
+            terminals = db.query(Terminal).all()
+
+        now_utc = datetime.utcnow()
+        grace_minutes = config.offline_grace_minutes if config.offline_grace_minutes is not None else 15
+        alert_on_recovery = config.alert_on_recovery if config.alert_on_recovery is not None else True
+        alerts_generated = 0
+        alerts_sent = 0
+
+        for t in terminals:
+            if not getattr(t, "alerts_enabled", True):
+                continue
+
+            nickname = t.nickname or t.kit_serial or t.device_id
+            sl = t.service_line_number or "N/A"
+            account = t.account_name or "ARGENTINA"
+
+            if not t.is_online:
+                # Terminal is currently OFFLINE
+                if not t.offline_since:
+                    t.offline_since = now_utc
+                    t.offline_alert_sent = False
+
+                downtime_minutes = max(0, int((now_utc - t.offline_since).total_seconds() // 60))
+
+                # Check if sustained downtime has crossed the grace threshold (e.g. 15 minutes)
+                if downtime_minutes >= grace_minutes:
+                    alert_type = "TERMINAL_OFFLINE"
+                    # Only alert if not already alerted for this outage incident AND not in cooldown
+                    if not t.offline_alert_sent and not self.is_in_cooldown(db, t.id, alert_type, config.cooldown_hours):
+                        alerts_generated += 1
+                        msg = telegram_service.format_offline_alert(
+                            nickname=nickname,
+                            service_line_number=sl,
+                            account_name=account,
+                            ping=t.ping_ms,
+                            offline_since=t.offline_since,
+                            duration_minutes=downtime_minutes,
+                            grace_minutes=grace_minutes
+                        )
+                        sent_count = await self._broadcast(db, channels, msg, fallback_token)
+                        self._record_event(
+                            db, t.id, nickname, sl, alert_type, "WARNING",
+                            f"Enlace fuera de línea por {downtime_minutes} min (umbral >{grace_minutes}m): {nickname}",
+                            sent_count
+                        )
+                        t.offline_alert_sent = True
+                        t.last_offline_alert_at = now_utc
+                        alerts_sent += 1
+            else:
+                # Terminal is currently ONLINE
+                # If an offline alert was sent for the previous outage, trigger recovery notification
+                if t.offline_alert_sent:
+                    downtime_minutes = None
+                    if t.offline_since:
+                        downtime_minutes = max(0, int((now_utc - t.offline_since).total_seconds() // 60))
+
+                    if alert_on_recovery:
+                        alerts_generated += 1
+                        rec_msg = telegram_service.format_recovery_alert(
+                            nickname=nickname,
+                            service_line_number=sl,
+                            account_name=account,
+                            downtime_minutes=downtime_minutes,
+                            ping=t.ping_ms
+                        )
+                        sent_count = await self._broadcast(db, channels, rec_msg, fallback_token)
+                        self._record_event(
+                            db, t.id, nickname, sl, "TERMINAL_ONLINE", "INFO",
+                            f"Enlace restablecido tras {downtime_minutes or 0} min offline: {nickname}",
+                            sent_count
+                        )
+                        alerts_sent += 1
+
+                # Clean up offline tracking state
+                t.offline_since = None
+                t.offline_alert_sent = False
+                t.last_online_at = now_utc
+
+        db.commit()
+        return {
+            "status": "COMPLETED",
+            "alerts_generated": alerts_generated,
+            "alerts_sent": alerts_sent
         }
 
     async def _broadcast(self, db: Session, channels: List[TelegramChannel], text_html: str, default_token: Optional[str] = None) -> int:
@@ -382,8 +503,20 @@ class AlertService:
 
             # 3. Offline alerts
             if config.alert_on_offline and not t.is_online:
-                msg = telegram_service.format_offline_alert(nickname, sl, account, t.ping_ms)
-                active_alerts.append(("TERMINAL_OFFLINE", "WARNING", msg, f"Enlace desconectado: {nickname}", t))
+                now_utc = datetime.utcnow()
+                grace_min = config.offline_grace_minutes if config.offline_grace_minutes is not None else 15
+                dt_mins = int((now_utc - t.offline_since).total_seconds() // 60) if t.offline_since else None
+                msg = telegram_service.format_offline_alert(
+                    nickname=nickname,
+                    service_line_number=sl,
+                    account_name=account,
+                    ping=t.ping_ms,
+                    offline_since=t.offline_since,
+                    duration_minutes=dt_mins,
+                    grace_minutes=grace_min
+                )
+                time_lbl = f" ({dt_mins}m offline)" if dt_mins is not None else ""
+                active_alerts.append(("TERMINAL_OFFLINE", "WARNING", msg, f"Enlace desconectado: {nickname}{time_lbl}", t))
 
         # Send alerts to this specific channel
         sent_count = 0

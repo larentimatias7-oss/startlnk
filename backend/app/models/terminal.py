@@ -16,6 +16,10 @@ class Terminal(Base):
     
     # Live Status & Metrics
     is_online = Column(Boolean, default=False)
+    last_online_at = Column(DateTime, nullable=True)
+    offline_since = Column(DateTime, nullable=True)
+    offline_alert_sent = Column(Boolean, default=False)
+    last_offline_alert_at = Column(DateTime, nullable=True)
     downlink_mbps = Column(Float, default=0.0)
     uplink_mbps = Column(Float, default=0.0)
     ping_ms = Column(Float, default=0.0)
@@ -101,6 +105,8 @@ class AlertConfig(Base):
     early_warning_percent = Column(Float, default=60.0) # % temprano
     early_warning_days_remaining = Column(Integer, default=15) # con >= N días restantes
     alert_on_offline = Column(Boolean, default=False)
+    offline_grace_minutes = Column(Integer, default=15) # Tolerancia sostenida antes de alertar
+    alert_on_recovery = Column(Boolean, default=True) # Notificar restablecimiento de enlace
     cooldown_hours = Column(Integer, default=24) # Horas de cooldown anti-spam (24hs)
     sync_interval_minutes = Column(Integer, default=15) # Frecuencia de sincronización / evaluación
     is_enabled = Column(Boolean, default=True)
