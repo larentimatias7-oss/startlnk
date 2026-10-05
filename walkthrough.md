@@ -259,8 +259,20 @@ Tras la integración del skill `production-code-audit` y la asimilación de prin
 ### 5. Validación Integral de la Suite
 - `backend/test_backend.py`: **100% Exitoso** (Modelos y persistencia).
 - `backend/test_api_endpoints.py`: **100% Exitoso** (Endpoints REST de flota).
-- `backend/test_alerts_system.py`: **100% Exitoso** (Motor de reglas, multi-bot y cooldown).
-- `npm run build`: **Compilación limpia en 3.3s** con 0 errores y 0 advertencias de tamaño de bundle.
+- `backend/test_alerts_system.py`: **100% Exitoso** (Motor de reglas, multi-bot, cooldown, tolerancia 15m y recovery).
+- `npm run build`: **Compilación limpia en 4.2s** con 0 errores y 0 advertencias de tamaño de bundle.
+
+### 6. Filtro de Tolerancia 15 Minutos para Enlaces Offline y Notificación de Recuperación (Recovery)
+- **Problema abordado**: Enlaces en emplazamientos remotos y cordilleranos (como Veladero a >4000 msnm, Sierra Grande u obras lineales) sufrían micro-cortes satelitales naturales (< 3 a 5 minutos) por conmutación orbital entre satélites LEO, ráfagas de viento o nieve. Cada micro-corte disparaba una alerta crítica inmediata, generando ruido innecesario y fatiga de alarmas en los canales de guardia de Telegram/WhatsApp.
+- **Solución implementada y validada**:
+  1. **Ventana de Tolerancia Sostenida (Histéresis)**: Cuando una antena se desconecta, se registra el inicio de la caída (`offline_since`). El sistema no emite alerta a menos que la interrupción se mantenga continua por más de `offline_grace_minutes` (por defecto **15 minutos**). Los micro-cortes menores se descartan silenciosamente.
+  2. **Notificación de Restablecimiento (Recovery Online)**: Al normalizarse un enlace que estuvo alertado como caído, se genera automáticamente una notificación en verde `🟢 ENLACE RESTABLECIDO: ENLACE ONLINE 🟢` indicando la duración total del corte y la latencia reanudada.
+  3. **Monitoreo Continuo Reactivo**: El planificador en segundo plano (`scheduler.py`) supervisa la lista de dispositivos cada 60 segundos, permitiendo alertar con precisión al cumplirse el minuto 15 y notificar la recuperación al instante.
+  4. **Suite de Pruebas Automatizadas (TEST 7 en `test_alerts_system.py`)**:
+     * Caso 5 min offline (<15m): Descartado exitosamente como micro-corte transitorio (0 alertas generadas).
+     * Caso 18 min offline (>=15m): Alerta sostenida generada correctamente con duración y marca de tiempo.
+     * Re-evaluación en estado offline: Anti-spam y cooldown verificados (0 alertas duplicadas).
+     * Restablecimiento online: Notificación de recuperación despachada limpiamente y reinicio de banderas.
 
 ---
 

@@ -37,10 +37,12 @@ El **TSM Starlink Fleet & Usage Monitor** es una solución Full-Stack diseñada 
 - **Monitoreo de Flota Unificado**: Visualización del estado en línea/fuera de línea, latencia de ping, fluctuación de throughput de bajada/subida y calidad de señal.
 - **Interactividad y Ordenamiento Multimétrica**: Tabla reactiva con ordenamiento ascendente/descendente configurable por cualquier métrica clave: consumo (GB / %), throughput instantáneo, latencia de ping, días restantes de ciclo y estado del terminal.
 - **Silenciamiento Individual de Terminales**: Control granular (`alerts_enabled`) para pausar notificaciones en antenas en mantenimiento programado o traslados sin afectar al resto de la flota.
-- **Motor de Alertas Inteligente con Doble Criterio**:
+- **Motor de Alertas Inteligente con Criterio de Cuota, Burn-Rate y Tolerancia**:
   - *Regla 1 (Umbral Fijo)*: Alerta al superar porcentajes configurables de cuota mensual (ej. 80%, 100%).
   - *Regla 2 (Burn-Rate / Alerta Temprana)*: Detección inteligente de ritmo acelerado de consumo que agotará el paquete antes del cierre de ciclo (evalúa `% consumido` vs `días restantes del ciclo`).
-  - *Ventana de Cooldown Anti-Spam*: Evita alertas repetitivas mediante enfriamiento configurable por terminal (2 a 24 horas).
+  - *Regla 3 (Caídas Offline con Tolerancia Sostenida de 15 Minutos)*: Filtro anti-falsos positivos diseñado para zonas remotas y cordilleranas (Veladero, Sierra Grande, Barda del Medio). Descarta micro-cortes transitorios (<15m) por conmutación orbital o ráfagas de viento y solo notifica si la caída es ininterrumpida.
+  - *Regla 4 (Aviso de Restablecimiento / Recovery Online)*: Alerta automática en verde que confirma la recuperación del enlace y reporta la duración total de la caída y la latencia recuperada.
+  - *Ventana de Cooldown Anti-Spam*: Evita alertas repetitivas mediante enfriamiento configurable por terminal (por defecto 24 horas).
   - *Cadencia Parametrizable en Caliente*: Frecuencia de sincronización y evaluación ajustable dinámicamente (5 a 60 minutos) sin reiniciar servicios.
 - **Arquitectura Multi-Bot y Notificaciones en Telegram**:
   - Gestión simultánea de múltiples bots de Telegram corporativos con validación criptográfica en vivo (`getMe`) y enmascaramiento de tokens.

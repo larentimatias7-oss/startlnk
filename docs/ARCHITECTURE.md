@@ -208,6 +208,10 @@ erDiagram
         string consumed_alarm "Alarma de cuota (NORMAL, 80, 100)"
         string active_alerts_json "Detalle JSON de alertas activas"
         boolean alerts_enabled "Control individual de alertas (Silenciar)"
+        datetime last_online_at "Fecha y hora de última verificación online"
+        datetime offline_since "Fecha y hora de inicio de caída"
+        boolean offline_alert_sent "Bandera de alerta offline ya despachada"
+        datetime last_offline_alert_at "Fecha de despacho de alerta offline"
         datetime updated_at "Fecha y hora de actualización"
     }
 
@@ -266,6 +270,8 @@ erDiagram
         float early_warning_percent "Umbral de consumo para burn-rate (%)"
         integer early_warning_days_remaining "Días restantes mínimos para burn-rate"
         boolean alert_on_offline "Notificar enlaces caídos"
+        integer offline_grace_minutes "Ventana de tolerancia sostenida (minutos, default 15)"
+        boolean alert_on_recovery "Notificar restablecimiento de enlace (Recovery)"
         integer cooldown_hours "Ventana anti-spam de enfriamiento (hs)"
         integer sync_interval_minutes "Cadencia de sincronización en minutos"
         boolean is_enabled "Interruptor maestro de alertas"
@@ -302,19 +308,26 @@ erDiagram
 ## 6. Motor de Alertas Inteligente
 
 ### 6.1. Reglas de Evaluación
-El motor evalúa concurrentemente 4 categorías de eventos:
+El motor evalúa concurrentemente 5 categorías de eventos:
 1. **Cuota Crítica (≥ 100%)**: Dispara alerta roja ante agotamiento total de cuota contratada.
 2. **Cuota de Advertencia (≥ 80%)**: Dispara alerta preventiva antes de agotar los datos prioritarios.
 3. **Alerta Temprana de Ritmo Acelerado (*Burn-Rate*)**:
    $$\text{Tasa Diaria} = \frac{\text{Consumo Acumulado (GB)}}{\text{Días Transcurridos del Ciclo}}$$
    $$\text{Días para Agotamiento} = \frac{\text{Cuota Restante (GB)}}{\text{Tasa Diaria}}$$
    Si el consumo supera el umbral configurado (ej: 60%) restando más de $X$ días en el ciclo (ej: 15 días) y los días para agotar la cuota son menores a los días restantes de ciclo, se genera una advertencia preventiva de sobreconsumo.
-4. **Enlace Satelital Desconectado (*Offline*)**: Si la opción está habilitada en la configuración, notifica antenas sin reporte de RF.
+4. **Enlace Satelital Desconectado (*Offline*) con Ventana de Tolerancia (15 min)**:
+   - **Filtro Anti-Falsos Positivos**: Diseñado especialmente para sitios remotos y cordilleranos (Veladero a >4000 msnm, Sierra Grande, Barda del Medio) donde son normales los micro-cortes transitorios (< 3 a 5 min) por conmutación satelital, ráfagas de viento o nieve.
+   - El sistema registra la hora inicial de desconexión (`offline_since`), pero **no despacha alerta** a menos que la caída se sostenga de forma ininterrumpida por más de `offline_grace_minutes` (por defecto **15 minutos** continuos).
+   - El mensaje de alerta detalla la duración exacta del corte, la hora de inicio y aclara que los micro-cortes transitorios fueron descartados.
+5. **Restablecimiento de Enlace (*Recovery Online*)**:
+   - Cuando un enlace que estuvo caído y alertado recupera la conexión satelital (`is_online = true`), el sistema genera automáticamente una notificación en verde `🟢 ENLACE RESTABLECIDO: ENLACE ONLINE 🟢`.
+   - Informa el tiempo total transcurrido de inactividad, la latencia recuperada y la fecha/hora de normalización, cerrando el ciclo del incidente.
 
 ### 6.2. Ventana de Cooldown Anti-Spam
 Para evitar saturar los canales de guardia con mensajes repetitivos cada 15 minutos:
-- Cada terminal registra en memoria la última fecha de notificación por tipo de alerta.
-- No se vuelve a emitir la misma alerta a los canales generales hasta transcurrido el lapso de `cooldown_hours` (configurable entre 2 y 24 horas).
+- Cada terminal registra la última fecha de notificación por tipo de alerta.
+- No se vuelve a emitir la misma alerta a los canales generales hasta transcurrido el lapso de `cooldown_hours` (por defecto 24 horas).
+- La alerta de restablecimiento (*Recovery*) se despacha de inmediato una vez que el enlace vuelve a reportar telemetría activa.
 
 ### 6.3. Despacho Multi-Bot y Pruebas con Alertas Reales
 - **Ruteo Multi-Bot**: Cada canal de Telegram despacha sus mensajes a través de su bot asignado (`bot_id`). Si el bot específico no está disponible, conmuta limpiamente al bot predeterminado (`is_default`).

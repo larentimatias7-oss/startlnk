@@ -200,7 +200,7 @@ Dispara de forma asíncrona una sincronización forzada e inmediata contra TSM E
 ## 11. Configuración de Alertas y Cadencia
 
 ### 11.1 `GET /api/alerts/config`
-Obtiene la configuración activa del motor de alertas (umbrales de cuota, ritmo de burn-rate, cadencia de monitoreo y cooldown).
+Obtiene la configuración activa del motor de alertas (umbrales de cuota, ritmo de burn-rate, ventana de tolerancia para desconexiones, recuperación y cadencia de monitoreo).
 
 #### Ejemplo de Respuesta:
 ```json
@@ -211,16 +211,18 @@ Obtiene la configuración activa del motor de alertas (umbrales de cuota, ritmo 
   "quota_critical_percent": 100.0,
   "early_warning_percent": 60.0,
   "early_warning_days_remaining": 15,
-  "alert_on_offline": false,
-  "cooldown_hours": 12,
+  "alert_on_offline": true,
+  "offline_grace_minutes": 15,
+  "alert_on_recovery": true,
+  "cooldown_hours": 24,
   "sync_interval_minutes": 15,
   "is_enabled": true,
-  "updated_at": "2026-09-22T14:15:00.000000"
+  "updated_at": "2026-10-05T17:30:00.000000"
 }
 ```
 
 ### 11.2 `PUT /api/alerts/config`
-Actualiza los umbrales de alerta y ajusta dinámicamente la cadencia del worker en segundo plano sin requerir reiniciar la aplicación.
+Actualiza los umbrales de alerta, la ventana de tolerancia ante caídas satelitales y ajusta dinámicamente la cadencia del worker en segundo plano sin requerir reiniciar la aplicación.
 
 #### Payload de Ejemplo:
 ```json
@@ -229,8 +231,10 @@ Actualiza los umbrales de alerta y ajusta dinámicamente la cadencia del worker 
   "quota_critical_percent": 100.0,
   "early_warning_percent": 60.0,
   "early_warning_days_remaining": 15,
-  "alert_on_offline": false,
-  "cooldown_hours": 12,
+  "alert_on_offline": true,
+  "offline_grace_minutes": 15,
+  "alert_on_recovery": true,
+  "cooldown_hours": 24,
   "sync_interval_minutes": 10,
   "is_enabled": true
 }
